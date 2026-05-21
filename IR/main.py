@@ -93,7 +93,7 @@ TARGET_FMAX = 300e6  # 300 MHz — typical VU13P clock
 
 def _build_bind():
     g_local = sched_decomp.decompose_nn_to_sched(g)
-    g_local = sched_engine.bind(g_local, model, RESOURCE_YAML)
+    g_local = sched_engine.bind_and_propagate(g_local, model, RESOURCE_YAML)
     g_local = sched_precision.propagate_precision(g_local)
     return g_local
 
@@ -101,7 +101,7 @@ def _build_bind():
 def _build_bound_folded(K: int):
     g_local = sched_decomp.decompose_nn_to_sched(g)
     g_local = sched_folder.stamp_fold_plan(g_local, factor=K)
-    g_local = sched_engine.bind(g_local, model, RESOURCE_YAML)
+    g_local = sched_engine.bind_and_propagate(g_local, model, RESOURCE_YAML)
     g_local = sched_precision.propagate_precision(g_local)
     g_local = sched_fold_precision.apply_fold_aware_precision(g_local)
     g_local = sched_folder.apply_timing_from_costs(g_local)

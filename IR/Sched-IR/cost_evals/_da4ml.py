@@ -18,6 +18,7 @@ instead of crashing at import time.
 from __future__ import annotations
 
 import math
+import os
 from typing import Any, Callable
 
 import numpy as np
@@ -55,6 +56,83 @@ def _require():
             "`KERAS_BACKEND=jax conda run -n jedi-linear python …`. "
             f"Underlying error: {_DA4ML_ERR}"
         )
+
+
+def _debug_enabled() -> bool:
+    return os.environ.get("CMIR_DEBUG_DA4ML", "").strip().lower() not in ("", "0", "false", "no")
+
+
+def _solution_debug_summary(sol) -> dict[str, Any]:
+    summary = {
+        "type": type(sol).__name__,
+        "shape": tuple(getattr(sol, "shape", ())) if getattr(sol, "shape", None) is not None else None,
+        "n_inputs": None,
+        "n_outputs": None,
+        "n_stages": None,
+        "stages": None,
+    }
+
+    try:
+        inp_qint = getattr(sol, "inp_qint", None)
+        summary["n_inputs"] = len(inp_qint) if inp_qint is not None else None
+    except Exception:
+        pass
+
+    try:
+        out_qint = getattr(sol, "out_qint", None)
+        summary["n_outputs"] = len(out_qint) if out_qint is not None else None
+    except Exception:
+        pass
+
+    stages = getattr(sol, "solutions", None)
+    if stages is not None:
+        stage_summaries = []
+        for idx, stage in enumerate(stages):
+            out_idxs = list(getattr(stage, "out_idxs", []) or [])
+            try:
+                stage_out_qint = getattr(stage, "out_qint", None)
+                stage_n_outputs = len(stage_out_qint) if stage_out_qint is not None else None
+            except Exception:
+                stage_n_outputs = None
+            try:
+                stage_inp_qint = getattr(stage, "inp_qint", None)
+                stage_n_inputs = len(stage_inp_qint) if stage_inp_qint is not None else None
+            except Exception:
+                stage_n_inputs = None
+            stage_summaries.append(
+                {
+                    "index": idx,
+                    "type": type(stage).__name__,
+                    "shape": tuple(getattr(stage, "shape", ())) if getattr(stage, "shape", None) is not None else None,
+                    "n_inputs": stage_n_inputs,
+                    "n_outputs": stage_n_outputs,
+                    "n_out_idxs": len(out_idxs),
+                    "n_negative_outidx": sum(1 for out_idx in out_idxs if out_idx < 0),
+                }
+            )
+        summary["n_stages"] = len(stage_summaries)
+        summary["stages"] = stage_summaries
+
+    return summary
+
+
+def _logical_precision_view(sol, pipe):
+    """Return the object whose I/O precision best represents the logical op.
+
+    For CMVM cascades we want latency/cost from the repipelined object, but the
+    logical input/output precision from the original solve result. Pipeline
+    conversion can legitimately split stages; it should not redefine the dense
+    layer's visible I/O width.
+    """
+    for candidate in (sol, pipe):
+        if candidate is None:
+            continue
+        if any(
+            getattr(candidate, attr, None) is not None
+            for attr in ("inp_qint", "out_qint", "inp_kifs", "out_kifs")
+        ):
+            return candidate
+    return pipe
 
 
 # --------------------------------------------------------------------------- #
@@ -181,69 +259,138 @@ def _collapse_precision_record_to_features(
     *,
     kind: str,
     context: str,
-) -> list[dict]:
+    non_feature_policy: str = "strict",
+) -> tuple[list[dict], dict]:
     arrays = [np.asarray(record[key]) for key in keys]
     arrays = list(np.broadcast_arrays(*arrays))
+    shape = arrays[0].shape
+    metadata = {
+        "policy": non_feature_policy,
+        "kind": kind,
+        "original_shape": tuple(shape),
+        "feature_count": feature_count,
+        "globally_uniform": False,
+        "varied_across_non_feature_axes": False,
+        "widened": False,
+        "widened_keys": [],
+    }
 
     # A broadcast-shaped but globally uniform precision is exact as one
     # reusable CMVM input precision.
     if all(_all_equal(arr) for arr in arrays):
-        return [
-            {key: _scalar(arr.reshape(-1)[0]) for key, arr in zip(keys, arrays)}
-        ]
+        metadata["globally_uniform"] = True
+        return (
+            [{key: _scalar(arr.reshape(-1)[0]) for key, arr in zip(keys, arrays)}],
+            metadata,
+        )
 
     if feature_count is None:
         raise ValueError(f"{context}: array-valued {kind} requires feature_count")
 
-    shape = arrays[0].shape
     if not shape or shape[-1] != feature_count:
         raise ValueError(
             f"{context}: array-valued {kind} has shape {shape}, "
             f"but dense kernel expects last dimension == feature_count={feature_count}"
         )
 
-    collapsed: list[np.ndarray] = []
-    for key, arr in zip(keys, arrays):
-        flat = arr.reshape(-1, feature_count)
-        if not np.all(flat == flat[0:1, :]):
+    flat_by_key = {key: arr.reshape(-1, feature_count) for key, arr in zip(keys, arrays)}
+    varied_keys = [
+        key
+        for key, flat in flat_by_key.items()
+        if not np.all(flat == flat[0:1, :])
+    ]
+    if varied_keys:
+        metadata["varied_across_non_feature_axes"] = True
+        if non_feature_policy == "strict":
             raise ValueError(
                 f"{context}: dense input precision varies across non-feature axes "
-                f"for {kind}.{key}; cannot represent this exactly as CMVM "
+                f"for {kind}.{varied_keys[0]}; cannot represent this exactly as CMVM "
                 f"input-feature precision"
             )
-        collapsed.append(flat[0, :])
+        if non_feature_policy != "widen":
+            raise ValueError(
+                f"{context}: unknown non_feature_policy {non_feature_policy!r}; "
+                "expected 'strict' or 'widen'"
+            )
 
-    return [
-        {key: _scalar(values[j]) for key, values in zip(keys, collapsed)}
-        for j in range(feature_count)
+        metadata["widened"] = True
+        metadata["widened_keys"] = list(varied_keys)
+        metadata["reason"] = (
+            "HGQ precision varied across non-feature axes; widened to one safe "
+            "QInterval per CMVM input lane."
+        )
+        records = []
+        for feature in range(feature_count):
+            rec = {}
+            for key in keys:
+                vals = flat_by_key[key][:, feature]
+                if kind == "qint":
+                    if key == "min":
+                        rec[key] = _scalar(np.min(vals))
+                    elif key == "max":
+                        rec[key] = _scalar(np.max(vals))
+                    elif key == "step":
+                        rec[key] = _scalar(np.min(vals))
+                    else:
+                        rec[key] = _scalar(vals[0])
+                elif kind == "kif":
+                    if key == "k":
+                        rec[key] = bool(np.max(vals))
+                    elif key in ("i", "f"):
+                        rec[key] = int(np.max(vals))
+                    else:
+                        rec[key] = _scalar(vals[0])
+                else:
+                    rec[key] = _scalar(vals[0])
+            records.append(rec)
+        return records, metadata
+
+    records = [
+        {key: _scalar(flat_by_key[key][0, feature]) for key in keys}
+        for feature in range(feature_count)
     ]
+    return records, metadata
 
 
-def _qints_from_array_dict(qint_payload: dict, feature_count: int | None, context: str):
-    records = _collapse_precision_record_to_features(
+def _qints_from_array_dict(
+    qint_payload: dict,
+    feature_count: int | None,
+    context: str,
+    *,
+    non_feature_policy: str = "strict",
+):
+    records, metadata = _collapse_precision_record_to_features(
         qint_payload,
         ("min", "max", "step"),
         feature_count,
         kind="qint",
         context=context,
+        non_feature_policy=non_feature_policy,
     )
     if len(records) == 1:
-        return qint_from_dict(records[0])
-    return [qint_from_dict(record) for record in records]
+        return qint_from_dict(records[0]), metadata
+    return [qint_from_dict(record) for record in records], metadata
 
 
-def _qints_from_kif_array_dict(kif_payload: dict, feature_count: int | None, context: str):
-    records = _collapse_precision_record_to_features(
+def _qints_from_kif_array_dict(
+    kif_payload: dict,
+    feature_count: int | None,
+    context: str,
+    *,
+    non_feature_policy: str = "strict",
+):
+    records, metadata = _collapse_precision_record_to_features(
         kif_payload,
         ("k", "i", "f"),
         feature_count,
         kind="kif",
         context=context,
+        non_feature_policy=non_feature_policy,
     )
     kifs = [kif_to_dict(record) for record in records]
     if len(kifs) == 1:
-        return qint_from_kif_dict(kifs[0])
-    return [qint_from_kif_dict(kif) for kif in kifs]
+        return qint_from_kif_dict(kifs[0]), metadata
+    return [qint_from_kif_dict(kif) for kif in kifs], metadata
 
 
 def qint_from_dict(obj):
@@ -271,6 +418,69 @@ def _shape_size(shape: tuple[int, ...] | None) -> int | None:
     return int(np.prod(dims)) if dims else 1
 
 
+def _records_for_shape(records: list[dict], shape: tuple[int, ...], idx: int, kind: str) -> list[dict]:
+    expected = _shape_size(shape)
+    if expected is None:
+        raise ValueError(
+            f"input {idx}: per-element {kind} require a fully concrete shape, got {shape}"
+        )
+    if len(records) == expected:
+        return records
+    if shape and len(records) == int(shape[-1]):
+        arr = np.array(records, dtype=object)
+        return np.broadcast_to(arr, shape).reshape(-1).tolist()
+    raise ValueError(
+        f"input {idx}: got {len(records)} {kind} for shape {shape}, expected {expected}"
+    )
+
+
+def _shape_without_symbolic_batch(shape) -> tuple[int, ...] | None:
+    if shape is None:
+        return None
+    dims = tuple(shape)
+    if dims and dims[0] is None:
+        dims = dims[1:]
+    return dims
+
+
+def _collapse_sequence_records_to_features(
+    records: list[dict],
+    keys: tuple[str, ...],
+    feature_count: int | None,
+    *,
+    shape,
+    kind: str,
+    context: str,
+    non_feature_policy: str,
+) -> tuple[list[dict], dict] | None:
+    feature_shape = _shape_without_symbolic_batch(shape)
+    if feature_count is None or feature_shape is None:
+        return None
+
+    expected = _shape_size(feature_shape)
+    if expected is None or len(records) != expected:
+        return None
+
+    if not feature_shape or int(feature_shape[-1]) != int(feature_count):
+        raise ValueError(
+            f"{context}: {kind} list has shape {feature_shape}, "
+            f"but dense kernel expects last dimension == feature_count={feature_count}"
+        )
+
+    payload = {
+        key: np.array([record[key] for record in records], dtype=object).reshape(feature_shape)
+        for key in keys
+    }
+    return _collapse_precision_record_to_features(
+        payload,
+        keys,
+        feature_count,
+        kind=kind,
+        context=context,
+        non_feature_policy=non_feature_policy,
+    )
+
+
 def qints_from_precision_payload(
     qint_payload,
     kif_payload=None,
@@ -278,37 +488,94 @@ def qints_from_precision_payload(
     shape=None,
     feature_count: int | None = None,
     context: str = "precision payload",
+    non_feature_policy: str = "strict",
+    return_metadata: bool = False,
 ):
     """Coerce qint/kif/bitwidth payloads into QInterval values.
 
     Priority: explicit qint payload, then kif payload, then scalar bw fallback.
     Scalar payloads stay scalar. Array/list payloads stay explicit.
     """
-    _ = shape
+    def _meta(policy: str, *, kind: str | None = None, original_shape=(), globally_uniform=True):
+        return {
+            "policy": policy,
+            "kind": kind,
+            "original_shape": tuple(original_shape),
+            "feature_count": feature_count,
+            "globally_uniform": bool(globally_uniform),
+            "varied_across_non_feature_axes": False,
+            "widened": False,
+            "widened_keys": [],
+        }
+
+    def _return(value, metadata):
+        return (value, metadata) if return_metadata else value
+
     if qint_payload is not None:
         # da4ml's `QInterval` is tuple-like (iterable) in some versions, so
         # detect it *before* treating tuples/lists as per-element payloads.
         try:
             if QInterval is not None and isinstance(qint_payload, QInterval):  # type: ignore[arg-type]
-                return qint_payload
+                return _return(qint_payload, _meta("scalar", kind="qint"))
         except TypeError:
             pass
         if isinstance(qint_payload, dict):
             qint_keys = {"min", "max", "step"}
             if qint_keys.issubset(qint_payload.keys()):
                 if any(np.asarray(qint_payload[key]).ndim > 0 for key in qint_keys):
-                    return _qints_from_array_dict(
+                    qints, metadata = _qints_from_array_dict(
                         qint_payload,
                         feature_count=feature_count,
                         context=context,
+                        non_feature_policy=non_feature_policy,
                     )
-                return qint_from_dict(qint_payload)
+                    return _return(qints, metadata)
+                return _return(qint_from_dict(qint_payload), _meta("scalar", kind="qint"))
             raise ValueError("array-valued qint dicts are not supported; flatten before coercion")
         if isinstance(qint_payload, (list, tuple)):
-            return [qint_from_dict(q) for q in qint_payload]
+            records = [q if isinstance(q, dict) else qint_to_dict(q) for q in qint_payload]
+            collapsed = _collapse_sequence_records_to_features(
+                records,
+                ("min", "max", "step"),
+                feature_count,
+                shape=shape,
+                kind="qint",
+                context=context,
+                non_feature_policy=non_feature_policy,
+            )
+            if collapsed is not None:
+                collapsed_records, metadata = collapsed
+                qints = [qint_from_dict(record) for record in collapsed_records]
+                if len(qints) == 1:
+                    return _return(qints[0], metadata)
+                return _return(qints, metadata)
+            return _return(
+                [qint_from_dict(q) for q in qint_payload],
+                _meta("explicit", kind="qint", original_shape=(len(qint_payload),), globally_uniform=False),
+            )
         if isinstance(qint_payload, np.ndarray):
-            return [qint_from_dict(q) for q in np.ravel(qint_payload).tolist()]
-        return qint_from_dict(qint_payload)
+            flat = np.ravel(qint_payload).tolist()
+            records = [q if isinstance(q, dict) else qint_to_dict(q) for q in flat]
+            collapsed = _collapse_sequence_records_to_features(
+                records,
+                ("min", "max", "step"),
+                feature_count,
+                shape=shape,
+                kind="qint",
+                context=context,
+                non_feature_policy=non_feature_policy,
+            )
+            if collapsed is not None:
+                collapsed_records, metadata = collapsed
+                qints = [qint_from_dict(record) for record in collapsed_records]
+                if len(qints) == 1:
+                    return _return(qints[0], metadata)
+                return _return(qints, metadata)
+            return _return(
+                [qint_from_dict(q) for q in flat],
+                _meta("explicit", kind="qint", original_shape=qint_payload.shape, globally_uniform=False),
+            )
+        return _return(qint_from_dict(qint_payload), _meta("scalar", kind="qint"))
 
     if kif_payload is not None:
         if isinstance(kif_payload, dict):
@@ -316,20 +583,40 @@ def qints_from_precision_payload(
             if kif_keys.issubset(kif_payload.keys()) and any(
                 np.asarray(kif_payload[key]).ndim > 0 for key in kif_keys
             ):
-                return _qints_from_kif_array_dict(
+                qints, metadata = _qints_from_kif_array_dict(
                     kif_payload,
                     feature_count=feature_count,
                     context=context,
+                    non_feature_policy=non_feature_policy,
                 )
+                return _return(qints, metadata)
         kifs = kifs_payload_to_dicts(kif_payload)
         if kifs is not None:
+            collapsed = _collapse_sequence_records_to_features(
+                kifs,
+                ("k", "i", "f"),
+                feature_count,
+                shape=shape,
+                kind="kif",
+                context=context,
+                non_feature_policy=non_feature_policy,
+            )
+            if collapsed is not None:
+                collapsed_records, metadata = collapsed
+                qints = [qint_from_kif_dict(kif_to_dict(record)) for record in collapsed_records]
+                if len(qints) == 1:
+                    return _return(qints[0], metadata)
+                return _return(qints, metadata)
             if len(kifs) == 1:
-                return qint_from_kif_dict(kifs[0])
-            return [qint_from_kif_dict(kif) for kif in kifs]
+                return _return(qint_from_kif_dict(kifs[0]), _meta("scalar", kind="kif"))
+            return _return(
+                [qint_from_kif_dict(kif) for kif in kifs],
+                _meta("explicit", kind="kif", original_shape=(len(kifs),), globally_uniform=False),
+            )
 
     if fallback_bw is not None:
-        return qint_from_bw(fallback_bw)
-    return None
+        return _return(qint_from_bw(fallback_bw), _meta("fallback_bw", kind="bitwidth"))
+    return _return(None, _meta("missing", globally_uniform=False))
 
 def qint_from_bw(bw: float | int, signed: bool = True) -> "QInterval":
     """Build a representative QInterval from a scalar HGQ-average bitwidth.
@@ -541,6 +828,7 @@ def _validate_kernel_result(result: dict) -> None:
 def solution_to_result(sol, latency_cutoff: int = -1) -> dict[str, Any]:
     _require()
     pipe = _ensure_pipeline(sol, latency_cutoff)
+    precision_sol = _logical_precision_view(sol, pipe)
     result = empty_kernel_result()
     if pipe is None:
         return result
@@ -564,13 +852,13 @@ def solution_to_result(sol, latency_cutoff: int = -1) -> dict[str, Any]:
         }
     )
 
-    raw_input_qints = getattr(pipe, "inp_qint", None)
-    raw_output_qints = getattr(pipe, "out_qint", None)
+    raw_input_qints = getattr(precision_sol, "inp_qint", None)
+    raw_output_qints = getattr(precision_sol, "out_qint", None)
     input_qints = qints_to_dicts(raw_input_qints)
     output_qints = qints_to_dicts(raw_output_qints)
 
-    raw_input_kifs = getattr(pipe, "inp_kifs", None)
-    raw_output_kifs = getattr(pipe, "out_kifs", None)
+    raw_input_kifs = getattr(precision_sol, "inp_kifs", None)
+    raw_output_kifs = getattr(precision_sol, "out_kifs", None)
     if raw_input_kifs is None and raw_input_qints is not None:
         raw_input_kifs = [getattr(q, "precision", None) for q in raw_input_qints]
     if raw_output_kifs is None and raw_output_qints is not None:
@@ -593,12 +881,15 @@ def solution_to_result(sol, latency_cutoff: int = -1) -> dict[str, Any]:
         "solution_type": type(pipe).__name__,
         "n_inputs": n_inputs,
         "n_outputs": n_outputs,
-        "shape": tuple(pipe.shape) if hasattr(pipe, "shape") else None,
+        "shape": tuple(precision_sol.shape) if hasattr(precision_sol, "shape") else None,
         "latency": tuple(map(float, pipe.latency)) if hasattr(pipe, "latency") else None,
         "out_latency": list(map(float, pipe.out_latencies)) if hasattr(pipe, "out_latencies") else None,
         "reg_bits": reg_bits,
         "pipeline_stages": n_stages,
     }
+    if _debug_enabled():
+        result["da4ml"]["logical_debug"] = _solution_debug_summary(precision_sol)
+        result["da4ml"]["pipe_debug"] = _solution_debug_summary(pipe)
     _validate_kernel_result(result)
     return result
 
@@ -688,6 +979,8 @@ def solve_dense_result(
     )
     result = solution_to_result(sol, latency_cutoff=latency_cutoff)
     result["da4ml"]["kernel_shape"] = tuple(kernel_f.shape)
+    if _debug_enabled():
+        result["da4ml"]["solve_debug"] = _solution_debug_summary(sol)
     return result
 
 
@@ -733,16 +1026,8 @@ def trace_lambda_result(
             if not isinstance(qints, list):
                 inputs.append(make_input_array_from_qint(shape, qints, hw=hw))
             else:
-                expected = _shape_size(shape)
-                if expected is None:
-                    raise ValueError(
-                        f"input {idx}: per-element qints require a fully concrete shape, got {shape}"
-                    )
-                if len(qints) != expected:
-                    raise ValueError(
-                        f"input {idx}: got {len(qints)} qints for shape {shape}, expected {expected}"
-                    )
-                qints_arr = np.array([qint_to_dict(q) for q in qints], dtype=object).reshape(shape)
+                records = _records_for_shape([qint_to_dict(q) for q in qints], shape, idx, "qints")
+                qints_arr = np.array(records, dtype=object).reshape(shape)
                 low = np.vectorize(lambda d: float(d["min"]))(qints_arr)
                 high = np.vectorize(lambda d: float(d["max"]))(qints_arr)
                 step = np.vectorize(lambda d: float(d["step"]))(qints_arr)
@@ -754,16 +1039,8 @@ def trace_lambda_result(
             else:
                 if kifs is None:
                     raise ValueError("input_kifs payload could not be converted")
-                expected = _shape_size(shape)
-                if expected is None:
-                    raise ValueError(
-                        f"input {idx}: per-element kifs require a fully concrete shape, got {shape}"
-                    )
-                if len(kifs) != expected:
-                    raise ValueError(
-                        f"input {idx}: got {len(kifs)} kifs for shape {shape}, expected {expected}"
-                    )
-                kifs_arr = np.array(kifs, dtype=object).reshape(shape)
+                records = _records_for_shape(kifs, shape, idx, "kifs")
+                kifs_arr = np.array(records, dtype=object).reshape(shape)
                 k_arr = np.vectorize(lambda d: int(bool(d["k"])))(kifs_arr)
                 i_arr = np.vectorize(lambda d: int(d["i"]))(kifs_arr)
                 f_arr = np.vectorize(lambda d: int(d["f"]))(kifs_arr)

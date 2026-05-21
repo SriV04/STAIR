@@ -11,6 +11,7 @@ Run from the CMIR repo root:
 
 from __future__ import annotations
 
+import argparse
 import glob
 import importlib.util
 import json
@@ -57,10 +58,27 @@ sched_infra   = _load_path("sched_infra", HERE / "Sched-IR" / "infrastructure.py
 build_nn_ir   = nn_ir_builder.build_nn_ir
 RESOURCE_YAML = HERE / "Sched-IR" / "da4ml-resource.yaml"
 
+from evaluate_helpers import (
+    apply_k1_ground_truth_override,
+    build_k1_validation_rows,
+    summarize_precision_payload,
+)
 from model import get_gnn  # from JEDI-linear/src
 from heterograph import HGraph
 
 import yaml as _yaml
+
+_ARGS = None
+
+
+def _parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print per-vertex precision payload shapes during sequential bind/eval.",
+    )
+    return parser.parse_args()
 
 # --------------------------------------------------------------------------- #
 # Build model + NN-IR (shared across all sweeps)
@@ -125,11 +143,101 @@ print(f"{'='*80}\n")
 FOLD_FACTORS = [1, 2, 4, 8]
 
 
-def build_scheduled(K: int) -> HGraph:
+def _bind_and_propagate_verbose(g_sched: HGraph, K: int) -> HGraph:
+    cfg = _yaml.safe_load(RESOURCE_YAML.read_text())
+    fpga = sched_engine.normalize_fpga(cfg.get("fpga") or {})
+    cfg["fpga"] = fpga
+    library = sched_engine.build_kernel_library(cfg)
+    weights = sched_engine.WeightProvider(model)
+
+    g_sched.pmap["resource_yaml"] = str(RESOURCE_YAML.resolve())
+    g_sched.pmap["target_device"] = fpga.get("device")
+    g_sched.pmap["fpga_config"] = fpga
+
+    next_instance: dict[str, int] = {}
+
+    for vx in sched_engine._topo_order(g_sched):
+        p = g_sched.pmap[vx]
+        prim = p.get("op")
+        if prim not in sched_engine._NEEDS_BIND:
+            continue
+
+        sched_engine._ingest_inputs_from_edges(g_sched, vx)
+        in_qint = summarize_precision_payload(p.get("input_qints"))
+        in_kif = summarize_precision_payload(p.get("input_kifs"))
+        layer = p.get("nn_layer_name")
+
+        try:
+            candidates = library.get(prim) or []
+            if not candidates:
+                raise ValueError(f"resource YAML has no kernel for primitive {prim!r}")
+
+            chosen = sched_engine._select_kernel(p, candidates)
+            raw_result = chosen.cost_query(p, weights, fpga)
+            result = sched_engine._kernel_result.normalize_kernel_result(raw_result, source="closed_form")
+        except Exception as exc:
+            print(
+                f"    [K={K} bind] vx={vx} layer={layer} op={prim} "
+                f"in_qint={in_qint} in_kif={in_kif} -> ERROR: {exc}"
+            )
+            raise
+
+        da4ml_info = result.get("da4ml") or {}
+        solve_debug = da4ml_info.get("solve_debug")
+        pipe_debug = da4ml_info.get("pipe_debug")
+        if solve_debug or pipe_debug:
+            def _fmt_stage_debug(name, info):
+                if not info:
+                    return None
+                stages = info.get("stages") or []
+                stage_s = ", ".join(
+                    f"{s.get('index')}:{s.get('shape')} out={s.get('n_outputs')} neg={s.get('n_negative_outidx')}"
+                    for s in stages
+                )
+                return (
+                    f"{name} type={info.get('type')} shape={info.get('shape')} "
+                    f"n_out={info.get('n_outputs')} stages=[{stage_s}]"
+                )
+
+            solve_s = _fmt_stage_debug("solve", solve_debug)
+            pipe_s = _fmt_stage_debug("pipe", pipe_debug)
+            parts = [part for part in (solve_s, pipe_s) if part]
+            if parts:
+                print(f"    [K={K} da4ml] layer={layer} " + " | ".join(parts))
+
+        p["kernel_type"] = chosen.name
+        p["kernel_instance"] = next_instance.setdefault(chosen.name, 0)
+        next_instance[chosen.name] += 1
+        sched_engine._apply_kernel_result(p, result)
+        sched_engine._propagate_outputs_to_edges(g_sched, vx)
+
+        out_qint = summarize_precision_payload(p.get("output_qints"))
+        out_kif = summarize_precision_payload(p.get("output_kifs"))
+        print(
+            f"    [K={K} bind] vx={vx} layer={layer} op={prim} "
+            f"in_qint={in_qint} in_kif={in_kif} "
+            f"out_qint={out_qint} out_kif={out_kif}"
+        )
+
+    sched_engine._validate_bind(g_sched)
+    return g_sched
+
+
+def build_scheduled(K: int, *, verbose: bool = False) -> HGraph:
     """Decompose → Fold-plan(K) → Bind → Precision → Fold-precision → Timing → Schedule → Steady_state → Insert_buffers."""
     g = sched_decomp.decompose_nn_to_sched(g_nnir)
     g = sched_folder.stamp_fold_plan(g, factor=K)
-    g = sched_engine.bind(g, model, RESOURCE_YAML)
+    prev_debug = os.environ.get("CMIR_DEBUG_DA4ML")
+    if verbose:
+        os.environ["CMIR_DEBUG_DA4ML"] = "1"
+    try:
+        g = _bind_and_propagate_verbose(g, K) if verbose else sched_engine.bind_and_propagate(g, model, RESOURCE_YAML)
+    finally:
+        if verbose:
+            if prev_debug is None:
+                os.environ.pop("CMIR_DEBUG_DA4ML", None)
+            else:
+                os.environ["CMIR_DEBUG_DA4ML"] = prev_debug
     g = sched_precision.propagate_precision(g)
     g = sched_fold_precision.apply_fold_aware_precision(g)
     g = sched_folder.apply_timing_from_costs(g)
@@ -191,9 +299,10 @@ if GROUND_TRUTH is not None:
 
 print("Building scheduled graphs...")
 graphs: dict[int, HGraph] = {}
+_ARGS = _parse_args()
 for K in FOLD_FACTORS:
     try:
-        graphs[K] = build_scheduled(K)
+        graphs[K] = build_scheduled(K, verbose=_ARGS.verbose)
         print(f"  K={K}: ✓")
     except Exception as e:
         print(f"  K={K}: ✗ ({e})")
@@ -243,15 +352,9 @@ def compute_metrics(g: HGraph, K: int) -> dict:
 
     # For K=1 (fully unfolded) the per-layer Sched-IR rollup is a lower bound
     # — it loses the cross-layer bitwidth tracking and pipeline-register
-    # accounting that the end-to-end DA flow performs. Override with the DA
-    # ground truth so the K=1 row matches the JEDI-linear paper.
-    if K == 1 and GROUND_TRUTH is not None:
-        m["total_luts"]     = GROUND_TRUTH["lut"]
-        m["total_ffs"]      = GROUND_TRUTH["ff"]
-        m["makespan"]       = GROUND_TRUTH["stages"]
-        m["pipeline_depth"] = GROUND_TRUTH["stages"]
-        m["batches_in_flight"] = GROUND_TRUTH["stages"]   # II=1 → one batch/stage
-        m["ground_truth"]   = True
+    # accounting that the end-to-end DA flow performs. Keep the raw Sched-IR
+    # metrics and override the paper-facing K=1 row with the DA ground truth.
+    m = apply_k1_ground_truth_override(m, GROUND_TRUTH)
 
     m["makespan_ns"] = m["makespan"] * (1e9 / TARGET_FMAX) if TARGET_FMAX else None
 
@@ -433,6 +536,33 @@ def _header(title: str):
     print(f"\n{'='*80}")
     print(f"  {title}")
     print(f"{'='*80}\n")
+
+
+# ---- TABLE 0: K=1 Validation ---- #
+if baseline and GROUND_TRUTH is not None and baseline.get("sched_ir_total_luts") is not None:
+    _header("TABLE 0: K=1 Validation (Sched-IR vs Ground Truth)")
+
+    print(f"{'Metric':>18} │ {'Sched-IR':>12} │ {'Ground Truth':>12} │ {'Delta':>12} │ {'Delta %':>8}")
+    _sep()
+    for row in build_k1_validation_rows(baseline, GROUND_TRUTH, TARGET_FMAX):
+        sched_ir = row["sched_ir"]
+        gt = row["ground_truth"]
+        delta = row["delta"]
+        delta_pct = row["delta_pct"]
+
+        def _fmt_value(value):
+            if value is None:
+                return "?"
+            if isinstance(value, float):
+                return f"{value:.1f}"
+            return f"{value:,}"
+
+        delta_s = "?" if delta is None else (f"{delta:+.1f}" if isinstance(delta, float) else f"{delta:+,}")
+        delta_pct_s = "?" if delta_pct is None else f"{delta_pct:+.1f}%"
+        print(
+            f"{row['metric']:>18} │ {_fmt_value(sched_ir):>12} │ {_fmt_value(gt):>12} │ "
+            f"{delta_s:>12} │ {delta_pct_s:>8}"
+        )
 
 
 # ---- TABLE 1: Primary Metrics ---- #

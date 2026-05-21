@@ -102,19 +102,22 @@ def _single_input_precision_kwargs(op_params: dict) -> dict[str, Any]:
 
 
 def _input_qints_for_kernel(op_params: dict, kernel: np.ndarray, *, context: str):
-    qints = _da4ml.qints_from_precision_payload(
+    qints, collapse_meta = _da4ml.qints_from_precision_payload(
         op_params.get("input_qint"),
         op_params.get("input_kif"),
         fallback_bw=op_params.get("in_bw"),
+        shape=op_params.get("input_shape") or op_params.get("in_shape"),
         feature_count=kernel.shape[0],
         context=context,
+        non_feature_policy="widen",
+        return_metadata=True,
     )
 
     if isinstance(qints, list):
         if len(qints) == 1:
-            return qints * kernel.shape[0]
+            return qints * kernel.shape[0], collapse_meta
         if len(qints) == kernel.shape[0]:
-            return qints
+            return qints, collapse_meta
         if len(qints) == kernel.size:
             raise ValueError(
                 f"{context}: got elementwise input precision "
@@ -125,7 +128,7 @@ def _input_qints_for_kernel(op_params: dict, kernel: np.ndarray, *, context: str
         )
 
     if qints is not None:
-        return [qints] * kernel.shape[0]
+        return [qints] * kernel.shape[0], collapse_meta
 
     raise ValueError("dense has no input precision")
 
@@ -142,7 +145,7 @@ def da4ml_dense_cost(p: dict, weights: WeightProvider, fpga: dict) -> dict[str, 
         )
 
     kernel = _as_2d_kernel(kernel)
-    input_qints = _input_qints_for_kernel(
+    input_qints, precision_collapse = _input_qints_for_kernel(
         op_params,
         kernel,
         context=f"dense vertex {p.get('nn_layer_name')!r}",
@@ -160,6 +163,7 @@ def da4ml_dense_cost(p: dict, weights: WeightProvider, fpga: dict) -> dict[str, 
         "kernel_shape": tuple(kernel.shape),
         "uses_qkernel": bool(op_params.get("uses_qkernel")),
         "kernel_sparsity": op_params.get("kernel_sparsity"),
+        "input_precision_collapse": precision_collapse,
     }
     return result
 
