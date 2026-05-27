@@ -50,7 +50,11 @@ def evaluate_folded_design(
     task_ir = expand_tasks(evaluation.graph)
     task_schedule = schedule_tasks(task_ir)
     metrics = schedule_metrics(task_schedule, task_ir, fclk_hz=target_fmax_hz)
-    task_graph = task_schedule_to_hgraph(task_ir, task_schedule)
+    task_graph = task_schedule_to_hgraph(
+        task_ir,
+        task_schedule,
+        source_graph=evaluation.graph,
+    )
     return EvaluatedDesign(
         sched_graph=sched_graph,
         fold_plan=fold_plan,

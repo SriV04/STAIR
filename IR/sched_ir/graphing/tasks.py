@@ -4,8 +4,34 @@ from __future__ import annotations
 
 from heterograph import HGraph
 
+from .styling import apply_sched_style, sched_vx_label
 
-def task_schedule_to_hgraph(task_graph, schedule):
+
+def task_vx_label(graph, vertex) -> str:
+    """Label a scheduled execution with its source operation and allocation."""
+    properties = graph.pmap[vertex]
+    base_label = sched_vx_label(graph, vertex)
+    return "\n".join(
+        [
+            base_label,
+            f"task: {properties['task_id']}",
+            f"resource: {properties['resource_id']}",
+        ]
+    )
+
+
+def task_edge_label(graph, edge) -> str:
+    return str(graph.pmap[edge].get("token") or "")
+
+
+def apply_task_style(graph) -> None:
+    """Attach task-execution labels while retaining Sched-IR operation colors."""
+    apply_sched_style(graph)
+    graph.vstyle["label"] = task_vx_label
+    graph.estyle["label"] = task_edge_label
+
+
+def task_schedule_to_hgraph(task_graph, schedule, *, source_graph=None):
     graph = HGraph()
     graph.pmap["name"] = "sched_ir_tasks"
     graph.pmap["view"] = "task_schedule"
@@ -16,7 +42,12 @@ def task_schedule_to_hgraph(task_graph, schedule):
         scheduled = schedule.tasks[task_id]
         vertex = graph.add_vx()
         vertex_by_task[task_id] = vertex
-        graph.pmap[vertex] = {
+        source_metadata = (
+            dict(source_graph.pmap[task.source_node])
+            if source_graph is not None
+            else {}
+        )
+        source_metadata.update({
             "task_id": task_id,
             "source_node": task.source_node,
             "temporal_step": task.temporal_step,
@@ -25,9 +56,12 @@ def task_schedule_to_hgraph(task_graph, schedule):
             "output_tokens": list(task.output_tokens),
             "start": scheduled.start,
             "end": scheduled.end,
+            "t_start": scheduled.start,
+            "t_end": scheduled.end,
             "latency": task.latency,
             "ii": task.ii,
-        }
+        })
+        graph.pmap[vertex] = source_metadata
         for token in task.output_tokens:
             producer_by_token[token] = vertex
 
@@ -40,4 +74,5 @@ def task_schedule_to_hgraph(task_graph, schedule):
             edge = graph.add_edge(source, destination)[0]
             graph.pmap[edge] = {"token": token, "edge_kind": "data"}
 
+    apply_task_style(graph)
     return graph

@@ -13,6 +13,8 @@ class FakeHGraph:
         self.vertices = []
         self.edges = []
         self.pmap = {}
+        self.vstyle = {}
+        self.estyle = {}
         self._vinit = vinit
         self._einit = einit
         if ginit is not None:

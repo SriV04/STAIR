@@ -1,7 +1,29 @@
-from IR.sched_ir.graphing.styling import sched_vx_label
+from IR.sched_ir.graphing.styling import SCHED_COLORS, sched_vx_label
 from IR.sched_ir.graphing.tasks import task_schedule_to_hgraph
 from IR.sched_ir.scheduling.expand import expand_tasks
 from IR.sched_ir.scheduling.scheduler import schedule_tasks
+
+
+class StyledFakeHGraph:
+    def __init__(self):
+        self.vertices = []
+        self.edges = []
+        self.pmap = {}
+        self.vstyle = {}
+        self.estyle = {}
+
+    def add_vx(self):
+        vertex = len(self.vertices)
+        self.vertices.append(vertex)
+        return vertex
+
+    def add_edge(self, source, destination):
+        edge = (source, destination)
+        self.edges.append(edge)
+        return [edge]
+
+    def in_vx(self, vertex):
+        return [source for source, destination in self.edges if destination == vertex]
 
 
 def test_evaluated_label_includes_backend_trace_and_npt(evaluated_dense_reduce_graph):
@@ -26,3 +48,34 @@ def test_task_schedule_view_contains_executions_and_token_dependency_edges(
     ]
     assert len(reduce_vertices) == 2
     assert all(graph.in_vx(vertex) for vertex in reduce_vertices)
+
+
+def test_task_schedule_view_styles_executions_from_source_node_metadata(
+    monkeypatch,
+    evaluated_dense_reduce_graph,
+):
+    monkeypatch.setattr(
+        "IR.sched_ir.graphing.tasks.HGraph",
+        StyledFakeHGraph,
+    )
+    task_graph = expand_tasks(evaluated_dense_reduce_graph)
+    schedule = schedule_tasks(task_graph)
+
+    graph = task_schedule_to_hgraph(
+        task_graph,
+        schedule,
+        source_graph=evaluated_dense_reduce_graph,
+    )
+    dense_vertex = next(
+        vertex
+        for vertex in graph.vertices
+        if graph.pmap[vertex]["task_id"] == "node:0:t0"
+    )
+    label = graph.vstyle["label"](graph, dense_vertex)
+
+    assert graph.vstyle["fillcolor"](graph, dense_vertex) == SCHED_COLORS["dense"]
+    assert "dense" in label
+    assert "[dense]" in label
+    assert "task: node:0:t0" in label
+    assert "resource: node:0" in label
+    assert "t=[0..2]" in label

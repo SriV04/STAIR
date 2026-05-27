@@ -14,6 +14,8 @@ class FakeHGraph:
         self.vertices = []
         self.edges = []
         self.pmap = {}
+        self.vstyle = {}
+        self.estyle = {}
         if self._ginit is not None:
             self._ginit(self)
 
