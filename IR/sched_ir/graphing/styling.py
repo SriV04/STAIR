@@ -118,6 +118,14 @@ def sched_vx_label(g, vx) -> str:
         ki = p.get("kernel_instance")
         lines.append(f"kernel: {kt}#{ki}")
 
+    backend = p.get("backend")
+    if backend is not None:
+        trace_id = p.get("backend_trace_id")
+        tag = f"backend: {backend}"
+        if trace_id is not None:
+            tag += f" {trace_id}"
+        lines.append(tag)
+
     # ---- Cost (without latency — that lives in the N–P–T block below) ---- #
     cost = p.get("cost") or {}
     if cost:

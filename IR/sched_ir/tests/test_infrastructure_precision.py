@@ -37,6 +37,12 @@ class FakeHGraph:
         self.edges.remove(edge)
         self.pmap.pop(edge, None)
 
+    def in_vx(self, vx):
+        return [src for src, dst in self.edges if dst == vx]
+
+    def out_vx(self, vx):
+        return [dst for src, dst in self.edges if src == vx]
+
 
 fake_heterograph = ModuleType("heterograph")
 fake_heterograph.HGraph = FakeHGraph

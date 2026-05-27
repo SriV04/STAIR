@@ -15,6 +15,10 @@ def default_graph_properties() -> dict:
         "area_budget": None,
         "latency_budget": None,
         "fold_plan": None,
+        "backend": None,
+        "backend_evaluated": False,
+        "backend_warnings": None,
+        "task_schedule": None,
         "makespan": None,
         "initiation_interval": None,
         "pipeline_depth": None,
@@ -28,4 +32,3 @@ def default_graph_properties() -> dict:
         "kernel_utilization": None,
         "critical_path": None,
     }
-

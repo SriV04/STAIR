@@ -5,6 +5,7 @@ def default_edge_properties() -> dict:
     return {
         "tensor_shape": None,
         "edge_kind": "data",
+        "value_id": None,
         "qint": None,
         "kif": None,
         "bitwidth": None,
@@ -38,5 +39,8 @@ def default_edge_properties() -> dict:
         "buffer_total_bits": None,
         "mux_select": None,
         "mux_input_index": None,
+        "evaluated_qints": None,
+        "evaluated_kifs": None,
+        "evaluated_shape": None,
+        "evaluated_latency": None,
     }
-
