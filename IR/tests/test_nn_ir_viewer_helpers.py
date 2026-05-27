@@ -1,27 +1,16 @@
 from __future__ import annotations
 
-import importlib.util
-import sys
 import unittest
 from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
 
+import sys
 
-HERE = Path(__file__).resolve().parent
-IR_DIR = HERE.parent
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-
-def _load(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-viewer_helpers = _load("nn_ir_jedi_viewer", IR_DIR / "nn_ir_jedi_viewer.py")
+from IR import nn_ir_jedi_viewer as viewer_helpers
 
 
 class ViewerHelpersTests(unittest.TestCase):

@@ -1,0 +1,251 @@
+================================================================================
+TRACE CONFIG
+================================================================================
+repo: /Users/sriharshavitta/Projects/CMIR
+resource_yaml: /Users/sriharshavitta/Projects/CMIR/ir/Sched-IR/da4ml-resource.yaml
+model: epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras
+target_fmax_hz: 300000000.0
+latency_cutoff: 2
+weights: trained
+
+================================================================================
+RAW DA4ML TRACE_MODEL(verbose=True)
+================================================================================
+Processing operation q_einsum_dense_batchnorm (QEinsumDenseBatchnorm) cumcost: 15075.0
+Processing operation q_sum (QSum) cumcost: 19061.0
+Processing operation q_einsum_dense_batchnorm_1 (QEinsumDenseBatchnorm) cumcost: 25390.0
+Processing operation q_einsum_dense_batchnorm_2 (QEinsumDenseBatchnorm) cumcost: 33002.0
+Processing operation q_add (QAdd) cumcost: 50587.0
+Processing operation q_einsum_dense_batchnorm_3 (QEinsumDenseBatchnorm) cumcost: 91979.0
+Processing operation q_sum_1 (QSum) cumcost: 95754.0
+Processing operation q_einsum_dense_batchnorm_4 (QEinsumDenseBatchnorm) cumcost: 111934.0
+Processing operation q_einsum_dense_batchnorm_5 (QEinsumDenseBatchnorm) cumcost: 123412.0
+Processing operation q_einsum_dense_batchnorm_6 (QEinsumDenseBatchnorm) cumcost: 128033.0
+Processing operation q_einsum_dense_batchnorm_7 (QEinsumDenseBatchnorm) cumcost: 129316.0
+
+================================================================================
+DA4ML FULL MODEL SUMMARY
+================================================================================
+raw solution: shape=(24, 5) cost=129316.0 latency=(47.0, 48.0)
+pipelined: stages=24 cost=129316.0 reg_bits=84732 latency=(47.0, 48.0) mode=retiming=True
+solution debug: {'type': 'Solution', 'shape': (24, 5), 'n_inputs': 24, 'n_outputs': 5, 'n_stages': None, 'stages': None}
+pipeline debug: {'type': 'CascadedSolution', 'shape': (24, 5), 'n_inputs': 24, 'n_outputs': 5, 'n_stages': 24, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (24, 758), 'n_inputs': 24, 'n_outputs': 758, 'n_out_idxs': 758, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (758, 804), 'n_inputs': 758, 'n_outputs': 804, 'n_out_idxs': 804, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (804, 571), 'n_inputs': 804, 'n_outputs': 571, 'n_out_idxs': 571, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (571, 609), 'n_inputs': 571, 'n_outputs': 609, 'n_out_idxs': 609, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (609, 411), 'n_inputs': 609, 'n_outputs': 411, 'n_out_idxs': 411, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (411, 838), 'n_inputs': 411, 'n_outputs': 838, 'n_out_idxs': 838, 'n_negative_outidx': 0}, {'index': 6, 'type': 'Solution', 'shape': (838, 1426), 'n_inputs': 838, 'n_outputs': 1426, 'n_out_idxs': 1426, 'n_negative_outidx': 0}, {'index': 7, 'type': 'Solution', 'shape': (1426, 813), 'n_inputs': 1426, 'n_outputs': 813, 'n_out_idxs': 813, 'n_negative_outidx': 0}, {'index': 8, 'type': 'Solution', 'shape': (813, 282), 'n_inputs': 813, 'n_outputs': 282, 'n_out_idxs': 282, 'n_negative_outidx': 0}, {'index': 9, 'type': 'Solution', 'shape': (282, 153), 'n_inputs': 282, 'n_outputs': 153, 'n_out_idxs': 153, 'n_negative_outidx': 0}, {'index': 10, 'type': 'Solution', 'shape': (153, 406), 'n_inputs': 153, 'n_outputs': 406, 'n_out_idxs': 406, 'n_negative_outidx': 0}, {'index': 11, 'type': 'Solution', 'shape': (406, 328), 'n_inputs': 406, 'n_outputs': 328, 'n_out_idxs': 328, 'n_negative_outidx': 0}, {'index': 12, 'type': 'Solution', 'shape': (328, 130), 'n_inputs': 328, 'n_outputs': 130, 'n_out_idxs': 130, 'n_negative_outidx': 0}, {'index': 13, 'type': 'Solution', 'shape': (130, 266), 'n_inputs': 130, 'n_outputs': 266, 'n_out_idxs': 266, 'n_negative_outidx': 0}, {'index': 14, 'type': 'Solution', 'shape': (266, 304), 'n_inputs': 266, 'n_outputs': 304, 'n_out_idxs': 304, 'n_negative_outidx': 0}, {'index': 15, 'type': 'Solution', 'shape': (304, 119), 'n_inputs': 304, 'n_outputs': 119, 'n_out_idxs': 119, 'n_negative_outidx': 0}, {'index': 16, 'type': 'Solution', 'shape': (119, 38), 'n_inputs': 119, 'n_outputs': 38, 'n_out_idxs': 38, 'n_negative_outidx': 0}, {'index': 17, 'type': 'Solution', 'shape': (38, 144), 'n_inputs': 38, 'n_outputs': 144, 'n_out_idxs': 144, 'n_negative_outidx': 0}, {'index': 18, 'type': 'Solution', 'shape': (144, 81), 'n_inputs': 144, 'n_outputs': 81, 'n_out_idxs': 81, 'n_negative_outidx': 0}, {'index': 19, 'type': 'Solution', 'shape': (81, 32), 'n_inputs': 81, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}, {'index': 20, 'type': 'Solution', 'shape': (32, 40), 'n_inputs': 32, 'n_outputs': 40, 'n_out_idxs': 40, 'n_negative_outidx': 0}, {'index': 21, 'type': 'Solution', 'shape': (40, 25), 'n_inputs': 40, 'n_outputs': 25, 'n_out_idxs': 25, 'n_negative_outidx': 0}, {'index': 22, 'type': 'Solution', 'shape': (25, 10), 'n_inputs': 25, 'n_outputs': 10, 'n_out_idxs': 10, 'n_negative_outidx': 0}, {'index': 23, 'type': 'Solution', 'shape': (10, 5), 'n_inputs': 10, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}]}
+
+stage summaries:
+  stage  0: shape=(24, 758) ops=2246 out= 758 cost=   11231.0 reg_bits=    7481 lat=(0.0, 2.0)
+  stage  1: shape=(758, 804) ops=3236 out= 804 cost=   13576.5 reg_bits=   14452 lat=(2.0, 4.0)
+  stage  2: shape=(804, 571) ops=1902 out= 571 cost=    7991.5 reg_bits=   13005 lat=(4.0, 6.0)
+  stage  3: shape=(571, 609) ops=1848 out= 609 cost=    9740.0 reg_bits=   12157 lat=(6.0, 8.0)
+  stage  4: shape=(609, 411) ops=1041 out= 411 cost=    4342.0 reg_bits=   10468 lat=(8.0, 10.0)
+  stage  5: shape=(411, 838) ops=1705 out= 838 cost=    5295.5 reg_bits=   10377 lat=(10.0, 12.0)
+  stage  6: shape=(838, 1426) ops=3021 out=1426 cost=   14730.5 reg_bits=   19309 lat=(12.0, 14.0)
+  stage  7: shape=(1426, 813) ops=3585 out= 813 cost=   16631.0 reg_bits=   21817 lat=(14.0, 16.0)
+  stage  8: shape=(813, 282) ops=2510 out= 282 cost=    9396.0 reg_bits=   11443 lat=(16.0, 18.0)
+  stage  9: shape=(282, 153) ops= 797 out= 153 cost=    3092.0 reg_bits=    3954 lat=(18.0, 20.0)
+  stage 10: shape=(153, 406) ops= 702 out= 406 cost=    4272.0 reg_bits=    5226 lat=(20.0, 22.0)
+  stage 11: shape=(406, 328) ops=1032 out= 328 cost=    6425.0 reg_bits=    8052 lat=(22.0, 24.0)
+  stage 12: shape=(328, 130) ops= 617 out= 130 cost=    3533.5 reg_bits=    6034 lat=(25.0, 26.0)
+  stage 13: shape=(130, 266) ops= 640 out= 266 cost=    3133.5 reg_bits=    4067 lat=(26.0, 28.0)
+  stage 14: shape=(266, 304) ops= 810 out= 304 cost=    4959.0 reg_bits=    5560 lat=(28.0, 30.0)
+  stage 15: shape=(304, 119) ops= 582 out= 119 cost=    3319.0 reg_bits=    5089 lat=(30.0, 32.0)
+  stage 16: shape=(119, 38) ops= 305 out=  38 cost=    1571.5 reg_bits=    2057 lat=(33.0, 34.0)
+  stage 17: shape=(38, 144) ops= 247 out= 144 cost=    1647.5 reg_bits=    1848 lat=(34.0, 36.0)
+  stage 18: shape=(144, 81) ops= 310 out=  81 cost=    1840.0 reg_bits=    2583 lat=(36.0, 38.0)
+  stage 19: shape=(81, 32) ops= 144 out=  32 cost=     854.0 reg_bits=    1629 lat=(39.0, 40.0)
+  stage 20: shape=(32, 40) ops= 135 out=  40 cost=     700.0 reg_bits=     927 lat=(40.0, 42.0)
+  stage 21: shape=(40, 25) ops=  92 out=  25 cost=     584.0 reg_bits=     781 lat=(43.0, 44.0)
+  stage 22: shape=(25, 10) ops=  46 out=  10 cost=     314.0 reg_bits=     542 lat=(45.0, 46.0)
+  stage 23: shape=(10, 5) ops=  21 out=   5 cost=     137.0 reg_bits=     272 lat=(47.0, 48.0)
+
+================================================================================
+DA4ML PER-KERAS-OP TRACE
+================================================================================
+q_einsum_dense_batchnorm [QEinsumDenseBatchnorm] depth=1 op_index=0
+  requires: ['input_layer']
+  produces: ['keras_tensor_1']
+  cumulative: shape=(24, 512) comb_cost=15075.0 comb_latency=(0.0, 3.0) pipe_stages=2 pipe_cost=15075.0 pipe_reg_bits=13872 pipe_mode=retiming=True
+  local: shape=(24, 512) lut=15075 ff=13872 lat=2 reg_bits=13872 mode=adapter
+q_sum [QSum] depth=2 op_index=0
+  requires: ['keras_tensor_1']
+  produces: ['keras_tensor_3']
+  cumulative: shape=(24, 64) comb_cost=19061.0 comb_latency=(0.0, 6.0) pipe_stages=3 pipe_cost=19061.0 pipe_reg_bits=8401 pipe_mode=retiming=True
+  local: shape=(512, 64) lut=3986 ff=7735 lat=3 reg_bits=7735 mode=adapter
+q_einsum_dense_batchnorm_1 [QEinsumDenseBatchnorm] depth=3 op_index=0
+  requires: ['keras_tensor_1']
+  produces: ['keras_tensor_5']
+  cumulative: shape=(24, 512) comb_cost=25390.0 comb_latency=(0.0, 8.0) pipe_stages=4 pipe_cost=25390.0 pipe_reg_bits=16438 pipe_mode=retiming=True
+  local: shape=(512, 512) lut=15448 ff=15795 lat=4 reg_bits=15795 mode=adapter
+q_einsum_dense_batchnorm_2 [QEinsumDenseBatchnorm] depth=3 op_index=1
+  requires: ['keras_tensor_3']
+  produces: ['keras_tensor_7']
+  cumulative: shape=(24, 64) comb_cost=33002.0 comb_latency=(0.0, 13.0) pipe_stages=7 pipe_cost=33002.0 pipe_reg_bits=18100 pipe_mode=retiming=True
+  local: shape=(64, 64) lut=13941 ff=10406 lat=7 reg_bits=10406 mode=adapter
+q_add [QAdd] depth=4 op_index=0
+  requires: ['keras_tensor_5', 'keras_tensor_7']
+  produces: ['keras_tensor_10']
+  cumulative: shape=(24, 512) comb_cost=50587.0 comb_latency=(0.0, 14.0) pipe_stages=7 pipe_cost=50587.0 pipe_reg_bits=37652 pipe_mode=retiming=True
+  local: shape=(576, 512) lut=2137 ff=12033 lat=7 reg_bits=12033 mode=adapter
+q_einsum_dense_batchnorm_3 [QEinsumDenseBatchnorm] depth=5 op_index=0
+  requires: ['keras_tensor_10']
+  produces: ['keras_tensor_12']
+  cumulative: shape=(24, 512) comb_cost=91979.0 comb_latency=(0.0, 19.0) pipe_stages=10 pipe_cost=91979.0 pipe_reg_bits=70345 pipe_mode=retiming=True
+  local: shape=(512, 512) lut=41392 ff=38438 lat=10 reg_bits=38438 mode=adapter
+q_sum_1 [QSum] depth=6 op_index=0
+  requires: ['keras_tensor_12']
+  produces: ['keras_tensor_14']
+  cumulative: shape=(24, 64) comb_cost=95754.0 comb_latency=(0.0, 22.0) pipe_stages=11 pipe_cost=95754.0 pipe_reg_bits=63229 pipe_mode=retiming=True
+  local: shape=(512, 64) lut=3775 ff=4210 lat=11 reg_bits=4210 mode=adapter
+q_einsum_dense_batchnorm_4 [QEinsumDenseBatchnorm] depth=7 op_index=0
+  requires: ['keras_tensor_14']
+  produces: ['keras_tensor_16']
+  cumulative: shape=(24, 64) comb_cost=111934.0 comb_latency=(26.0, 28.0) pipe_stages=14 pipe_cost=111934.0 pipe_reg_bits=73980 pipe_mode=retiming=True
+  local: shape=(64, 64) lut=16180 ff=11847 lat=7 reg_bits=11847 mode=adapter
+q_einsum_dense_batchnorm_5 [QEinsumDenseBatchnorm] depth=8 op_index=0
+  requires: ['keras_tensor_16']
+  produces: ['keras_tensor_18']
+  cumulative: shape=(24, 32) comb_cost=123412.0 comb_latency=(34.0, 35.0) pipe_stages=18 pipe_cost=123412.0 pipe_reg_bits=81272 pipe_mode=retiming=True
+  local: shape=(64, 32) lut=11478 ff=8410 lat=6 reg_bits=8410 mode=adapter
+q_einsum_dense_batchnorm_6 [QEinsumDenseBatchnorm] depth=9 op_index=0
+  requires: ['keras_tensor_18']
+  produces: ['keras_tensor_20']
+  cumulative: shape=(24, 16) comb_cost=128033.0 comb_latency=(40.0, 42.0) pipe_stages=21 pipe_cost=128033.0 pipe_reg_bits=83954 pipe_mode=retiming=True
+  local: shape=(32, 16) lut=4621 ff=3930 lat=5 reg_bits=3930 mode=adapter
+q_einsum_dense_batchnorm_7 [QEinsumDenseBatchnorm] depth=10 op_index=0
+  requires: ['keras_tensor_20']
+  produces: ['keras_tensor_22']
+  cumulative: shape=(24, 5) comb_cost=129316.0 comb_latency=(47.0, 48.0) pipe_stages=24 pipe_cost=129316.0 pipe_reg_bits=84732 pipe_mode=retiming=True
+  local: shape=(16, 5) lut=1283 ff=1076 lat=5 reg_bits=1076 mode=adapter
+
+================================================================================
+SCHED-IR RAW BIND TRACE
+================================================================================
+[bind da4ml] vx=0 layer=q_einsum_dense_batchnorm op=dense solve={'type': 'CascadedSolution', 'shape': (3, 64), 'n_inputs': 3, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (3, 64), 'n_inputs': 3, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}]} pipe={'type': 'CascadedSolution', 'shape': (3, 35), 'n_inputs': 3, 'n_outputs': 35, 'n_stages': 4, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (3, 70), 'n_inputs': 3, 'n_outputs': 70, 'n_out_idxs': 70, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (70, 64), 'n_inputs': 70, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, {'index': 2, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, {'index': 3, 'type': 'Solution', 'shape': (64, 35), 'n_inputs': 64, 'n_outputs': 35, 'n_out_idxs': 35, 'n_negative_outidx': 0}]}
+[bind] vx=0 layer=q_einsum_dense_batchnorm op=dense in_qint=list[1]<qint> in_kif=list[1]<kif> out_qint=list[64]<qint> out_kif=list[64]<kif>
+[bind da4ml] vx=1 layer=q_sum op=reduce solve=None pipe={'type': 'CascadedSolution', 'shape': (512, 64), 'n_inputs': 512, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (512, 128), 'n_inputs': 512, 'n_outputs': 128, 'n_out_idxs': 128, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (128, 64), 'n_inputs': 128, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}]}
+[bind] vx=1 layer=q_sum op=reduce in_qint=list[1]<list[64]<qint>> in_kif=list[1]<list[64]<kif>> out_qint=list[64]<qint> out_kif=list[64]<kif>
+[bind da4ml] vx=2 layer=q_einsum_dense_batchnorm_1 op=dense solve={'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 34}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 34}]} pipe={'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 71), 'n_inputs': 64, 'n_outputs': 71, 'n_out_idxs': 71, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (71, 35), 'n_inputs': 71, 'n_outputs': 35, 'n_out_idxs': 35, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (35, 64), 'n_inputs': 35, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 34}, {'index': 3, 'type': 'Solution', 'shape': (64, 9), 'n_inputs': 64, 'n_outputs': 9, 'n_out_idxs': 9, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (9, 25), 'n_inputs': None, 'n_outputs': 25, 'n_out_idxs': 25, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (25, 64), 'n_inputs': None, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 34}]}
+[bind] vx=2 layer=q_einsum_dense_batchnorm_1 op=dense in_qint=list[1]<list[64]<qint>> in_kif=list[1]<list[64]<kif>> out_qint=list[64]<qint> out_kif=list[64]<kif>
+[bind da4ml] vx=3 layer=q_einsum_dense_batchnorm_2 op=dense solve={'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 7}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 7}]} pipe={'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 5, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 428), 'n_inputs': 64, 'n_outputs': 428, 'n_out_idxs': 428, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (428, 172), 'n_inputs': 428, 'n_outputs': 172, 'n_out_idxs': 172, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (172, 60), 'n_inputs': 172, 'n_outputs': 60, 'n_out_idxs': 60, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (60, 64), 'n_inputs': 60, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 7}, {'index': 4, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 7}]}
+[bind] vx=3 layer=q_einsum_dense_batchnorm_2 op=dense in_qint=list[1]<list[64]<qint>> in_kif=list[1]<list[64]<kif>> out_qint=list[64]<qint> out_kif=list[64]<kif>
+[bind da4ml] vx=4 layer=q_add op=elementwise solve=None pipe={'type': 'CascadedSolution', 'shape': (576, 512), 'n_inputs': 576, 'n_outputs': 512, 'n_stages': 1, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (576, 512), 'n_inputs': 576, 'n_outputs': 512, 'n_out_idxs': 512, 'n_negative_outidx': 0}]}
+[bind] vx=4 layer=q_add op=elementwise in_qint=list[2]<list[64]<qint>> in_kif=list[2]<list[64]<kif>> out_qint=list[512]<qint> out_kif=list[512]<kif>
+[bind da4ml] vx=5 layer=q_einsum_dense_batchnorm_3 op=dense solve={'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}]} pipe={'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 194), 'n_inputs': 64, 'n_outputs': 194, 'n_out_idxs': 194, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (194, 71), 'n_inputs': 194, 'n_outputs': 71, 'n_out_idxs': 71, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (71, 64), 'n_inputs': 71, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, {'index': 3, 'type': 'Solution', 'shape': (64, 2), 'n_inputs': 64, 'n_outputs': 2, 'n_out_idxs': 2, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (2, 44), 'n_inputs': None, 'n_outputs': 44, 'n_out_idxs': 44, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (44, 64), 'n_inputs': None, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}]}
+[bind] vx=5 layer=q_einsum_dense_batchnorm_3 op=dense in_qint=list[1]<list[512]<qint>> in_kif=list[1]<list[512]<kif>> out_qint=list[64]<qint> out_kif=list[64]<kif>
+[bind da4ml] vx=6 layer=q_sum_1 op=reduce solve=None pipe={'type': 'CascadedSolution', 'shape': (512, 64), 'n_inputs': 512, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (512, 128), 'n_inputs': 512, 'n_outputs': 128, 'n_out_idxs': 128, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (128, 64), 'n_inputs': 128, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}]}
+[bind] vx=6 layer=q_sum_1 op=reduce in_qint=list[1]<list[64]<qint>> in_kif=list[1]<list[64]<kif>> out_qint=list[64]<qint> out_kif=list[64]<kif>
+[bind da4ml] vx=7 layer=q_einsum_dense_batchnorm_4 op=dense solve={'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}]} pipe={'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 546), 'n_inputs': 64, 'n_outputs': 546, 'n_out_idxs': 546, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (546, 221), 'n_inputs': 546, 'n_outputs': 221, 'n_out_idxs': 221, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (221, 68), 'n_inputs': 221, 'n_outputs': 68, 'n_out_idxs': 68, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (68, 64), 'n_inputs': 68, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (64, 60), 'n_inputs': 64, 'n_outputs': 60, 'n_out_idxs': 60, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (60, 64), 'n_inputs': None, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}]}
+[bind] vx=7 layer=q_einsum_dense_batchnorm_4 op=dense in_qint=list[1]<list[64]<qint>> in_kif=list[1]<list[64]<kif>> out_qint=list[64]<qint> out_kif=list[64]<kif>
+[bind da4ml] vx=8 layer=q_einsum_dense_batchnorm_5 op=dense solve={'type': 'CascadedSolution', 'shape': (64, 32), 'n_inputs': 64, 'n_outputs': 32, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 32), 'n_inputs': 64, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (32, 32), 'n_inputs': 32, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}]} pipe={'type': 'CascadedSolution', 'shape': (64, 32), 'n_inputs': 64, 'n_outputs': 32, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 388), 'n_inputs': 64, 'n_outputs': 388, 'n_out_idxs': 388, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (388, 167), 'n_inputs': 388, 'n_outputs': 167, 'n_out_idxs': 167, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (167, 61), 'n_inputs': 167, 'n_outputs': 61, 'n_out_idxs': 61, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (61, 32), 'n_inputs': 61, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (32, 4), 'n_inputs': 32, 'n_outputs': 4, 'n_out_idxs': 4, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (4, 32), 'n_inputs': None, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}]}
+[bind] vx=8 layer=q_einsum_dense_batchnorm_5 op=dense in_qint=list[1]<list[64]<qint>> in_kif=list[1]<list[64]<kif>> out_qint=list[32]<qint> out_kif=list[32]<kif>
+[bind da4ml] vx=9 layer=q_einsum_dense_batchnorm_6 op=dense solve={'type': 'CascadedSolution', 'shape': (32, 16), 'n_inputs': 32, 'n_outputs': 16, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (32, 16), 'n_inputs': 32, 'n_outputs': 16, 'n_out_idxs': 16, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (16, 16), 'n_inputs': 16, 'n_outputs': 16, 'n_out_idxs': 16, 'n_negative_outidx': 0}]} pipe={'type': 'CascadedSolution', 'shape': (32, 16), 'n_inputs': 32, 'n_outputs': 16, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (32, 140), 'n_inputs': 32, 'n_outputs': 140, 'n_out_idxs': 140, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (140, 60), 'n_inputs': 140, 'n_outputs': 60, 'n_out_idxs': 60, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (60, 17), 'n_inputs': 60, 'n_outputs': 17, 'n_out_idxs': 17, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (17, 16), 'n_inputs': 17, 'n_outputs': 16, 'n_out_idxs': 16, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (16, 15), 'n_inputs': 16, 'n_outputs': 15, 'n_out_idxs': 15, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (15, 16), 'n_inputs': None, 'n_outputs': 16, 'n_out_idxs': 16, 'n_negative_outidx': 0}]}
+[bind] vx=9 layer=q_einsum_dense_batchnorm_6 op=dense in_qint=list[1]<list[32]<qint>> in_kif=list[1]<list[32]<kif>> out_qint=list[16]<qint> out_kif=list[16]<kif>
+[bind da4ml] vx=10 layer=q_einsum_dense_batchnorm_7 op=dense solve={'type': 'CascadedSolution', 'shape': (16, 5), 'n_inputs': 16, 'n_outputs': 5, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (16, 5), 'n_inputs': 16, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (5, 5), 'n_inputs': 5, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}]} pipe={'type': 'CascadedSolution', 'shape': (16, 5), 'n_inputs': 16, 'n_outputs': 5, 'n_stages': 4, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (16, 37), 'n_inputs': 16, 'n_outputs': 37, 'n_out_idxs': 37, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (37, 15), 'n_inputs': 37, 'n_outputs': 15, 'n_out_idxs': 15, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (15, 5), 'n_inputs': 15, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (5, 5), 'n_inputs': 5, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}]}
+[bind] vx=10 layer=q_einsum_dense_batchnorm_7 op=dense in_qint=list[1]<list[16]<qint>> in_kif=list[1]<list[16]<kif>> out_qint=list[5]<qint> out_kif=list[5]<kif>
+
+================================================================================
+SCHED-IR VERTEX TRACE
+================================================================================
+vx= 0 layer=q_einsum_dense_batchnorm op=dense kernel=da4ml_dense P=8 T=1 lut=101 ff=3795 dsp=0 bram=0 lat=4 t=[0, 4] critical=True
+  rolled: mult=8 lut=808 ff=30360 ff_no_local_reg_bits=0
+  precision: in=list[3]<qint> out=list[64]<qint>
+  da4ml: n_in=3 n_out=64 shape=(3, 64) stages=4 reg_bits=3795 raw_reg_bits=3795
+  da4ml logical_debug: {'type': 'CascadedSolution', 'shape': (3, 64), 'n_inputs': 3, 'n_outputs': 64, 'n_stages': 2, 'stages': [
+    {'index': 0, 'type': 'Solution', 'shape': (3, 64), 'n_inputs': 3, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, 
+    {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}]}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (3, 35), 'n_inputs': 3, 'n_outputs': 35, 'n_stages': 4, 'stages': [
+    {'index': 0, 'type': 'Solution', 'shape': (3, 70), 'n_inputs': 3, 'n_outputs': 70, 'n_out_idxs': 70, 'n_negative_outidx': 0}, 
+    {'index': 1, 'type': 'Solution', 'shape': (70, 64), 'n_inputs': 70, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, 
+    {'index': 2, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, 
+    {'index': 3, 'type': 'Solution', 'shape': (64, 35), 'n_inputs': 64, 'n_outputs': 35, 'n_out_idxs': 35, 'n_negative_outidx': 0}]}
+vx= 1 layer=q_sum op=reduce kernel=da4ml_reduce P=8 T=1 lut=448 ff=12020 dsp=0 bram=0 lat=2 t=[4, 6] critical=True
+  rolled: mult=1 lut=448 ff=12020 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[64]<qint>
+  da4ml: n_in=512 n_out=64 shape=(512, 64) stages=2 reg_bits=12020 raw_reg_bits=12020
+  da4ml logical_debug: {'type': 'Solution', 'shape': (512, 64), 'n_inputs': 512, 'n_outputs': 64, 'n_stages': None, 'stages': None}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (512, 64), 'n_inputs': 512, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (512, 128), 'n_inputs': 512, 'n_outputs': 128, 'n_out_idxs': 128, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (128, 64), 'n_inputs': 128, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}]}
+vx= 2 layer=q_einsum_dense_batchnorm_1 op=dense kernel=da4ml_dense P=8 T=1 lut=196 ff=7512 dsp=0 bram=0 lat=6 t=[4, 10] critical=False
+  rolled: mult=8 lut=1568 ff=60096 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[64]<qint>
+  da4ml: n_in=64 n_out=64 shape=(64, 64) stages=6 reg_bits=7512 raw_reg_bits=7512
+  da4ml logical_debug: {'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 34}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 34}]}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 71), 'n_inputs': 64, 'n_outputs': 71, 'n_out_idxs': 71, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (71, 35), 'n_inputs': 71, 'n_outputs': 35, 'n_out_idxs': 35, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (35, 64), 'n_inputs': 35, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 34}, {'index': 3, 'type': 'Solution', 'shape': (64, 9), 'n_inputs': 64, 'n_outputs': 9, 'n_out_idxs': 9, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (9, 25), 'n_inputs': None, 'n_outputs': 25, 'n_out_idxs': 25, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (25, 64), 'n_inputs': None, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 34}]}
+vx= 3 layer=q_einsum_dense_batchnorm_2 op=dense kernel=da4ml_dense P=1 T=1 lut=1205 ff=22127 dsp=0 bram=0 lat=5 t=[6, 11] critical=True
+  rolled: mult=1 lut=1205 ff=22127 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[64]<qint>
+  da4ml: n_in=64 n_out=64 shape=(64, 64) stages=5 reg_bits=22127 raw_reg_bits=22127
+  da4ml logical_debug: {'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 7}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 7}]}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 5, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 428), 'n_inputs': 64, 'n_outputs': 428, 'n_out_idxs': 428, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (428, 172), 'n_inputs': 428, 'n_outputs': 172, 'n_out_idxs': 172, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (172, 60), 'n_inputs': 172, 'n_outputs': 60, 'n_out_idxs': 60, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (60, 64), 'n_inputs': 60, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 7}, {'index': 4, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 7}]}
+vx=11 layer=buf_q_einsum_dense_batchnorm_1_q_add op=buffer kernel=register_buffer P=1 T=1 lut=0 ff=1606 dsp=0 bram=0 lat=1 t=[10, 11] critical=False
+  rolled: mult=1 lut=0 ff=1606 ff_no_local_reg_bits=1606
+  precision: in=None out=None
+vx= 4 layer=q_add op=elementwise kernel=da4ml_elementwise P=8 T=1 lut=512 ff=31622 dsp=0 bram=0 lat=1 t=[11, 12] critical=True
+  rolled: mult=1 lut=512 ff=31622 ff_no_local_reg_bits=0
+  precision: in=list[2]<qint> out=list[512]<qint>
+  da4ml: n_in=576 n_out=512 shape=(576, 512) stages=1 reg_bits=31622 raw_reg_bits=31622
+  da4ml logical_debug: {'type': 'Solution', 'shape': (576, 512), 'n_inputs': 576, 'n_outputs': 512, 'n_stages': None, 'stages': None}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (576, 512), 'n_inputs': 576, 'n_outputs': 512, 'n_stages': 1, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (576, 512), 'n_inputs': 576, 'n_outputs': 512, 'n_out_idxs': 512, 'n_negative_outidx': 0}]}
+vx= 5 layer=q_einsum_dense_batchnorm_3 op=dense kernel=da4ml_dense P=8 T=1 lut=526 ff=18882 dsp=0 bram=0 lat=6 t=[12, 18] critical=True
+  rolled: mult=8 lut=4208 ff=151056 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[64]<qint>
+  da4ml: n_in=64 n_out=64 shape=(64, 64) stages=6 reg_bits=18882 raw_reg_bits=18882
+  da4ml logical_debug: {'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}]}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 194), 'n_inputs': 64, 'n_outputs': 194, 'n_out_idxs': 194, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (194, 71), 'n_inputs': 194, 'n_outputs': 71, 'n_out_idxs': 71, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (71, 64), 'n_inputs': 71, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}, {'index': 3, 'type': 'Solution', 'shape': (64, 2), 'n_inputs': 64, 'n_outputs': 2, 'n_out_idxs': 2, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (2, 44), 'n_inputs': None, 'n_outputs': 44, 'n_out_idxs': 44, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (44, 64), 'n_inputs': None, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 6}]}
+vx= 6 layer=q_sum_1 op=reduce kernel=da4ml_reduce P=8 T=1 lut=448 ff=28696 dsp=0 bram=0 lat=2 t=[18, 20] critical=True
+  rolled: mult=1 lut=448 ff=28696 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[64]<qint>
+  da4ml: n_in=512 n_out=64 shape=(512, 64) stages=2 reg_bits=28696 raw_reg_bits=28696
+  da4ml logical_debug: {'type': 'Solution', 'shape': (512, 64), 'n_inputs': 512, 'n_outputs': 64, 'n_stages': None, 'stages': None}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (512, 64), 'n_inputs': 512, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (512, 128), 'n_inputs': 512, 'n_outputs': 128, 'n_out_idxs': 128, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (128, 64), 'n_inputs': 128, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}]}
+vx= 7 layer=q_einsum_dense_batchnorm_4 op=dense kernel=da4ml_dense P=1 T=1 lut=1525 ff=54741 dsp=0 bram=0 lat=6 t=[20, 26] critical=True
+  rolled: mult=1 lut=1525 ff=54741 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[64]<qint>
+  da4ml: n_in=64 n_out=64 shape=(64, 64) stages=6 reg_bits=54741 raw_reg_bits=54741
+  da4ml logical_debug: {'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}]}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (64, 64), 'n_inputs': 64, 'n_outputs': 64, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 546), 'n_inputs': 64, 'n_outputs': 546, 'n_out_idxs': 546, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (546, 221), 'n_inputs': 546, 'n_outputs': 221, 'n_out_idxs': 221, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (221, 68), 'n_inputs': 221, 'n_outputs': 68, 'n_out_idxs': 68, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (68, 64), 'n_inputs': 68, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (64, 60), 'n_inputs': 64, 'n_outputs': 60, 'n_out_idxs': 60, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (60, 64), 'n_inputs': None, 'n_outputs': 64, 'n_out_idxs': 64, 'n_negative_outidx': 0}]}
+vx= 8 layer=q_einsum_dense_batchnorm_5 op=dense kernel=da4ml_dense P=1 T=1 lut=1115 ff=45878 dsp=0 bram=0 lat=6 t=[26, 32] critical=True
+  rolled: mult=1 lut=1115 ff=45878 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[32]<qint>
+  da4ml: n_in=64 n_out=32 shape=(64, 32) stages=6 reg_bits=45878 raw_reg_bits=45878
+  da4ml logical_debug: {'type': 'CascadedSolution', 'shape': (64, 32), 'n_inputs': 64, 'n_outputs': 32, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 32), 'n_inputs': 64, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (32, 32), 'n_inputs': 32, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}]}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (64, 32), 'n_inputs': 64, 'n_outputs': 32, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (64, 388), 'n_inputs': 64, 'n_outputs': 388, 'n_out_idxs': 388, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (388, 167), 'n_inputs': 388, 'n_outputs': 167, 'n_out_idxs': 167, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (167, 61), 'n_inputs': 167, 'n_outputs': 61, 'n_out_idxs': 61, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (61, 32), 'n_inputs': 61, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (32, 4), 'n_inputs': 32, 'n_outputs': 4, 'n_out_idxs': 4, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (4, 32), 'n_inputs': None, 'n_outputs': 32, 'n_out_idxs': 32, 'n_negative_outidx': 0}]}
+vx= 9 layer=q_einsum_dense_batchnorm_6 op=dense kernel=da4ml_dense P=1 T=1 lut=415 ff=21877 dsp=0 bram=0 lat=6 t=[32, 38] critical=True
+  rolled: mult=1 lut=415 ff=21877 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[16]<qint>
+  da4ml: n_in=32 n_out=16 shape=(32, 16) stages=6 reg_bits=21877 raw_reg_bits=21877
+  da4ml logical_debug: {'type': 'CascadedSolution', 'shape': (32, 16), 'n_inputs': 32, 'n_outputs': 16, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (32, 16), 'n_inputs': 32, 'n_outputs': 16, 'n_out_idxs': 16, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (16, 16), 'n_inputs': 16, 'n_outputs': 16, 'n_out_idxs': 16, 'n_negative_outidx': 0}]}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (32, 16), 'n_inputs': 32, 'n_outputs': 16, 'n_stages': 6, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (32, 140), 'n_inputs': 32, 'n_outputs': 140, 'n_out_idxs': 140, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (140, 60), 'n_inputs': 140, 'n_outputs': 60, 'n_out_idxs': 60, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (60, 17), 'n_inputs': 60, 'n_outputs': 17, 'n_out_idxs': 17, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (17, 16), 'n_inputs': 17, 'n_outputs': 16, 'n_out_idxs': 16, 'n_negative_outidx': 0}, {'index': 4, 'type': 'Solution', 'shape': (16, 15), 'n_inputs': 16, 'n_outputs': 15, 'n_out_idxs': 15, 'n_negative_outidx': 0}, {'index': 5, 'type': 'Solution', 'shape': (15, 16), 'n_inputs': None, 'n_outputs': 16, 'n_out_idxs': 16, 'n_negative_outidx': 0}]}
+vx=10 layer=q_einsum_dense_batchnorm_7 op=dense kernel=da4ml_dense P=1 T=1 lut=106 ff=6624 dsp=0 bram=0 lat=4 t=[38, 42] critical=True
+  rolled: mult=1 lut=106 ff=6624 ff_no_local_reg_bits=0
+  precision: in=list[1]<qint> out=list[5]<qint>
+  da4ml: n_in=16 n_out=5 shape=(16, 5) stages=4 reg_bits=6624 raw_reg_bits=6624
+  da4ml logical_debug: {'type': 'CascadedSolution', 'shape': (16, 5), 'n_inputs': 16, 'n_outputs': 5, 'n_stages': 2, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (16, 5), 'n_inputs': 16, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (5, 5), 'n_inputs': 5, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}]}
+  da4ml pipe_debug: {'type': 'CascadedSolution', 'shape': (16, 5), 'n_inputs': 16, 'n_outputs': 5, 'n_stages': 4, 'stages': [{'index': 0, 'type': 'Solution', 'shape': (16, 37), 'n_inputs': 16, 'n_outputs': 37, 'n_out_idxs': 37, 'n_negative_outidx': 0}, {'index': 1, 'type': 'Solution', 'shape': (37, 15), 'n_inputs': 37, 'n_outputs': 15, 'n_out_idxs': 15, 'n_negative_outidx': 0}, {'index': 2, 'type': 'Solution', 'shape': (15, 5), 'n_inputs': 15, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}, {'index': 3, 'type': 'Solution', 'shape': (5, 5), 'n_inputs': 5, 'n_outputs': 5, 'n_out_idxs': 5, 'n_negative_outidx': 0}]}
+
+================================================================================
+SIDE-BY-SIDE COMPARISON
+================================================================================
+            Metric |     Sched-IR |     DA4ML GT |              Delta
+--------------------------------------------------------------------------------
+              LUTs |       12,358 |      129,316 |  -116,958 (-90.4%)
+               FFs |      466,703 |       84,732 | +381,971 (+450.8%)
+  FFs (no regbits) |        1,606 |       84,732 |   -83,126 (-98.1%)
+          Makespan |           42 |           24 |       +18 (+75.0%)
+                II |            1 |            1 |         +0 (+0.0%)
+  Throughput (MHz) |        300.0 |        300.0 |       +0.0 (+0.0%)
+
+rolled check: graph_lut=12,358 graph_ff=466,703 derived_lut=12,358 derived_ff=466,703
+
+Layer                            | Sched LUT raw | Sched LUT roll | DA local LUT | Sched FF raw | Sched FF roll | Sched FF noRB | DA local FF | Sched lat | DA local lat
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+q_einsum_dense_batchnorm         |           101 |            808 |       15,075 |        3,795 |        30,360 |             0 |      13,872 |         4 |            2
+q_sum                            |           448 |            448 |        3,986 |       12,020 |        12,020 |             0 |       7,735 |         2 |            3
+q_einsum_dense_batchnorm_1       |           196 |          1,568 |       15,448 |        7,512 |        60,096 |             0 |      15,795 |         6 |            4
+q_einsum_dense_batchnorm_2       |         1,205 |          1,205 |       13,941 |       22,127 |        22,127 |             0 |      10,406 |         5 |            7
+buf_q_einsum_dense_batchnorm_1_q_add |             0 |              0 |            0 |        1,606 |         1,606 |         1,606 |           0 |         1 |            0
+q_add                            |           512 |            512 |        2,137 |       31,622 |        31,622 |             0 |      12,033 |         1 |            7
+q_einsum_dense_batchnorm_3       |           526 |          4,208 |       41,392 |       18,882 |       151,056 |             0 |      38,438 |         6 |           10
+q_sum_1                          |           448 |            448 |        3,775 |       28,696 |        28,696 |             0 |       4,210 |         2 |           11
+q_einsum_dense_batchnorm_4       |         1,525 |          1,525 |       16,180 |       54,741 |        54,741 |             0 |      11,847 |         6 |            7
+q_einsum_dense_batchnorm_5       |         1,115 |          1,115 |       11,478 |       45,878 |        45,878 |             0 |       8,410 |         6 |            6
+q_einsum_dense_batchnorm_6       |           415 |            415 |        4,621 |       21,877 |        21,877 |             0 |       3,930 |         6 |            5
+q_einsum_dense_batchnorm_7       |           106 |            106 |        1,283 |        6,624 |         6,624 |             0 |       1,076 |         4 |            5

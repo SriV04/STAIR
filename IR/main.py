@@ -8,14 +8,13 @@ to this file)::
 
 Then open http://localhost:8888 in a browser.
 
-Styling + Gantt rendering have been moved into dedicated modules alongside
-the IR they belong to (``IR/NN-IR/styling.py``, ``IR/Sched-IR/styling.py``,
-``IR/Sched-IR/gantt.py``). This file is now just an orchestration script.
+Styling + Gantt rendering live alongside the package modules they style
+(``IR/nn_ir/styling.py``, ``IR/sched_ir/graphing/styling.py``,
+``IR/sched_ir/graphing/gantt.py``). This file is now just an orchestration script.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -30,42 +29,21 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 
 os.environ.setdefault("KERAS_BACKEND", "jax")
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "JEDI-linear" / "src"))
 sys.path.insert(0, str(REPO / "heterograph"))
-
-
-# --------------------------------------------------------------------------- #
-# Hyphenated-directory module loader
-# --------------------------------------------------------------------------- #
-
-def _load_path(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# IR pipeline modules.
-nn_ir_builder = _load_path("nn_ir_builder",     HERE / "NN-IR"    / "builder.py")
-sched_decomp  = _load_path("sched_decomposer",  HERE / "Sched-IR" / "decomposer.py")
-sched_engine  = _load_path("sched_scheduler",   HERE / "Sched-IR" / "binder.py")
-sched_precision = _load_path("sched_precision", HERE / "Sched-IR" / "precision.py")
-sched_fold_precision = _load_path("sched_fold_precision", HERE / "Sched-IR" / "fold_precision.py")
-sched_folder  = _load_path("sched_folder",      HERE / "Sched-IR" / "folder.py")
-sched_p3      = _load_path("sched_p3",          HERE / "Sched-IR" / "scheduler_p3.py")
-sched_infra   = _load_path("sched_infra",       HERE / "Sched-IR" / "infrastructure.py")
-
-# Styling + visualisation modules.
-nn_styling    = _load_path("nn_ir_styling",     HERE / "NN-IR"    / "styling.py")
-sched_styling = _load_path("sched_ir_styling",  HERE / "Sched-IR" / "styling.py")
-sched_gantt   = _load_path("sched_ir_gantt",    HERE / "Sched-IR" / "gantt.py")
-
-build_nn_ir       = nn_ir_builder.build_nn_ir
-apply_nn_style    = nn_styling.apply_nn_style
-apply_sched_style = sched_styling.apply_sched_style
-GanttWrapper      = sched_gantt.GanttWrapper
-RESOURCE_YAML     = HERE / "Sched-IR" / "da4ml-resource.yaml"
+from IR.nn_ir.builder import build_nn_ir
+from IR.nn_ir.styling import apply_nn_style
+from IR.sched_ir import binder as sched_engine
+from IR.sched_ir import decomposer as sched_decomp
+from IR.sched_ir import precision as sched_precision
+from IR.sched_ir.folding import fold_precision as sched_fold_precision
+from IR.sched_ir.folding import folder as sched_folder
+from IR.sched_ir.graphing.gantt import GanttWrapper
+from IR.sched_ir.graphing.styling import apply_sched_style
+from IR.sched_ir.resource import DA4ML_RESOURCE_YAML as RESOURCE_YAML
+from IR.sched_ir.scheduling import infrastructure as sched_infra
+from IR.sched_ir.scheduling import scheduler_p3 as sched_p3
 
 
 # --------------------------------------------------------------------------- #

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import glob
-import importlib.util
 import json
 import math
 import os
@@ -30,39 +29,23 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 
 os.environ.setdefault("KERAS_BACKEND", "jax")
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "JEDI-linear" / "src"))
 sys.path.insert(0, str(REPO / "heterograph"))
-sys.path.insert(0, str(HERE))   # so `import plot` resolves
-
-
-# --------------------------------------------------------------------------- #
-# Load modules (hyphenated directories → importlib)
-# --------------------------------------------------------------------------- #
-
-def _load_path(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-nn_ir_builder = _load_path("nn_ir_builder", HERE / "NN-IR" / "builder.py")
-sched_decomp  = _load_path("sched_decomposer", HERE / "Sched-IR" / "decomposer.py")
-sched_engine  = _load_path("sched_scheduler", HERE / "Sched-IR" / "binder.py")
-sched_precision = _load_path("sched_precision", HERE / "Sched-IR" / "precision.py")
-sched_fold_precision = _load_path("sched_fold_precision", HERE / "Sched-IR" / "fold_precision.py")
-sched_folder  = _load_path("sched_folder", HERE / "Sched-IR" / "folder.py")
-sched_p3      = _load_path("sched_p3", HERE / "Sched-IR" / "scheduler_p3.py")
-sched_infra   = _load_path("sched_infra", HERE / "Sched-IR" / "infrastructure.py")
-build_nn_ir   = nn_ir_builder.build_nn_ir
-RESOURCE_YAML = HERE / "Sched-IR" / "da4ml-resource.yaml"
-
-from evaluate_helpers import (
+from IR.evaluate_helpers import (
     apply_k1_ground_truth_override,
     build_k1_validation_rows,
     summarize_precision_payload,
 )
+from IR.nn_ir.builder import build_nn_ir
+from IR.sched_ir import binder as sched_engine
+from IR.sched_ir import decomposer as sched_decomp
+from IR.sched_ir import precision as sched_precision
+from IR.sched_ir.folding import fold_precision as sched_fold_precision
+from IR.sched_ir.folding import folder as sched_folder
+from IR.sched_ir.resource import DA4ML_RESOURCE_YAML as RESOURCE_YAML
+from IR.sched_ir.scheduling import infrastructure as sched_infra
+from IR.sched_ir.scheduling import scheduler_p3 as sched_p3
 from model import get_gnn  # from JEDI-linear/src
 from heterograph import HGraph
 
@@ -368,19 +351,27 @@ def compute_metrics(g: HGraph, K: int) -> dict:
     n_buffers = 0
     n_muxes = 0
 
-    # Multiplier convention (matches Sched-IR/infrastructure.py:_rollup): dense
-    # costs are per-lane and scale with P; reduce/elementwise/buffer/mux costs
-    # cover the full hardware structure and are not replicated.
+    # Multiplier convention matches Sched-IR/infrastructure.py:_rollup.
     def _mult_for(op: str, inst: int) -> int:
         if op in ("reduce", "elementwise", "buffer", "mux"):
             return 1
         return inst
 
+    def _mult_for_vertex(p: dict) -> int:
+        op = p.get("op", "")
+        inst = int(p.get("physical_instances") or 1)
+        if op == "dense":
+            # Folded HGQ dense layers are traced as the replicated P-lane
+            # folded layer, matching sandbox.ipynb.
+            meta = ((p.get("kernel_result") or {}).get("kernel_meta") or {})
+            if meta.get("dense_cost_granularity") == "folded_replicated_layer":
+                return 1
+        return _mult_for(op, inst)
+
     for vx, p in _vertex_iter(g):
         cost = p.get("cost") or {}
-        inst = int(p.get("physical_instances") or 1)
         op = p.get("op", "")
-        mult = _mult_for(op, inst)
+        mult = _mult_for_vertex(p)
 
         if op == "buffer":
             n_buffers += 1
@@ -460,8 +451,7 @@ def compute_metrics(g: HGraph, K: int) -> dict:
     for vx, p in _vertex_iter(g):
         op = p.get("op", "unknown")
         cost = p.get("cost") or {}
-        inst = int(p.get("physical_instances") or 1)
-        mult = _mult_for(op, inst)
+        mult = _mult_for_vertex(p)
         op_costs[op]["lut"]  += int(cost.get("lut", 0)) * mult
         op_costs[op]["ff"]   += int(cost.get("ff", 0)) * mult
         op_costs[op]["dsp"]  += int(cost.get("dsp", 0)) * mult
@@ -749,7 +739,7 @@ print(f"\n  Results saved to: {output_path}")
 # --------------------------------------------------------------------------- #
 
 try:
-    import plot as _plot  # IR/plot.py — added to sys.path at top of file
+    from IR import plot as _plot
 
     plot_dir = HERE / "evaluation_plots"
     saved = _plot.plot_all({int(K): m for K, m in serialisable.items()}, plot_dir)

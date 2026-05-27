@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import glob
-import importlib.util
 import json
 import os
 import sys
@@ -19,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 
 os.environ.setdefault("KERAS_BACKEND", "jax")
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "JEDI-linear" / "src"))
 sys.path.insert(0, str(REPO / "heterograph"))
 
@@ -30,14 +30,6 @@ VARIANT_DIR = "3-feature-perminv" if USE_PERMINV else "3-feature"
 CHECKPOINT_GLOB = (
     REPO / "official_models" / VARIANT_DIR / f"jet_classifier_large_{N_CONSTITUENTS}" / "models" / "*.keras"
 )
-
-
-def _load_path(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
 
 
 def _summarize_array(value, *, max_items: int = 32) -> dict[str, Any] | None:
@@ -209,14 +201,10 @@ def _load_trained_model():
 
 
 def main() -> None:
+    from IR.nn_ir.builder import build_nn_ir
+    from IR.nn_ir.styling import apply_nn_style
     from heterograph.webview import WebView
     from model import get_gnn
-
-    nn_ir_builder = _load_path("nn_ir_builder_viewer", HERE / "NN-IR" / "builder.py")
-    nn_styling = _load_path("nn_ir_styling_viewer", HERE / "NN-IR" / "styling.py")
-
-    build_nn_ir = nn_ir_builder.build_nn_ir
-    apply_nn_style = nn_styling.apply_nn_style
 
     model, checkpoint = _load_trained_model()
     conf = SimpleNamespace(n_constituents=N_CONSTITUENTS, pt_eta_phi=True)
