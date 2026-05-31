@@ -86,45 +86,6 @@ def evaluate_folded_design(nn_graph, model, fold_factor=2):
     return design
 
 
-    """Extract cost information per layer from the design."""
-    print(f"\n{'='*70}")
-    print(f"Extracting Cost Per Layer")
-    print(f"{'='*70}")
-    
-    layer_costs = []
-    
-    # Extract from evaluation graph
-    eval_graph = design.evaluation.graph
-    
-    for node_id, node in eval_graph.v.items():
-        layer_name = node.labels.get("name", str(node_id))
-        layer_op = node.labels.get("op", "unknown")
-        
-        # Get cost information
-        cost = node.labels.get("cost", {})
-        if cost is None:
-            cost = {}
-        
-        layer_costs.append({
-            "layer_id": node_id,
-            "layer_name": layer_name,
-            "op_type": layer_op,
-            "lut": cost.get("lut", 0),
-            "ff": cost.get("ff", 0),
-            "dsp": cost.get("dsp", 0),
-            "bram": cost.get("bram", 0),
-            "uram": cost.get("uram", 0),
-            "latency_cycles": cost.get("latency_cycles", 0),
-            "ii": cost.get("ii", 1),
-        })
-    
-    df_layer_costs = pd.DataFrame(layer_costs)
-    
-    print(f"\nLayer Costs Summary:")
-    print(df_layer_costs.to_string())
-    
-    return df_layer_costs
-
 
 def extract_cost_per_task(design, task_graph):
     """Extract cost information per task from the schedule."""
@@ -167,7 +128,31 @@ def extract_cost_per_task(design, task_graph):
     return df_task_costs
 
 
-
+def check_correctness(design, model):
+    """Check symbolic correctness of the design."""
+    print(f"\n{'='*70}")
+    print(f"Checking Symbolic Correctness")
+    print(f"{'='*70}")
+    
+    correctness_report = api.check_symbolic_correctness(design, model=model)
+    
+    print(f"\nCorrectness Report:")
+    if hasattr(correctness_report, "__dict__"):
+        for key, value in vars(correctness_report).items():
+            if isinstance(value, list):
+                print(f"  {key}:")
+                for idx, item in enumerate(value):
+                    print(f"    [{idx}] {item}")
+            elif isinstance(value, dict):
+                print(f"  {key}:")
+                for sub_key, sub_value in value.items():
+                    print(f"    {sub_key}: {sub_value}")
+            else:
+                print(f"  {key}: {value}")
+    else:
+        print(correctness_report)
+    
+    return correctness_report
 
 
 def main():
@@ -187,7 +172,7 @@ def main():
         nn_graph = build_nn_ir_graph(model)
         
         # Step 3: Evaluate folded design (fold_factor=2 -> 4 lanes)
-        design = evaluate_folded_design(nn_graph, model, fold_factor=4)
+        design = evaluate_folded_design(nn_graph, model, fold_factor=2)
 
         apply_nn_style(nn_graph)
         apply_sched_style(design.sched_graph)
@@ -195,6 +180,9 @@ def main():
         # Step 6: Print summary
         for k, v in design.metrics.items():
             print(f"  {k}: {v:.4f}" if isinstance(v, float) else f"  {k}: {v}")
+
+        correctness = check_correctness(design, model)
+
 
         webview = WebView()
         webview.add_graph(nn_graph, title="NN-IR Graph")

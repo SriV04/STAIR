@@ -66,6 +66,17 @@ def evaluate_folded_design(
     )
 
 
+def check_symbolic_correctness(
+    design: EvaluatedDesign,
+    *,
+    model,
+    config=None,
+):
+    from .correctness.checker import check_symbolic_correctness as _check
+
+    return _check(design, model=model, config=config)
+
+
 if __name__ == "__main__":
     import IR.nn_ir as nn_ir
     import keras
