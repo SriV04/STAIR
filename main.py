@@ -187,7 +187,7 @@ def main():
         nn_graph = build_nn_ir_graph(model)
         
         # Step 3: Evaluate folded design (fold_factor=2 -> 4 lanes)
-        design = evaluate_folded_design(nn_graph, model, fold_factor=2)
+        design = evaluate_folded_design(nn_graph, model, fold_factor=4)
 
         apply_nn_style(nn_graph)
         apply_sched_style(design.sched_graph)

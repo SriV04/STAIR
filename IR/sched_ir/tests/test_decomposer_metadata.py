@@ -14,6 +14,8 @@ class FakeHGraph:
         self.vertices = []
         self.edges = []
         self.pmap = {}
+        self.vstyle = {}
+        self.estyle = {}
         if self._ginit is not None:
             self._ginit(self)
 
@@ -40,7 +42,7 @@ class FakeHGraph:
 fake_heterograph = ModuleType("heterograph")
 fake_heterograph.HGraph = FakeHGraph
 sys.modules["heterograph"] = fake_heterograph
-from IR.sched_ir import decomposer
+from IR.sched_ir.lowering import decomposer
 
 
 class DecomposerMetadataTests(unittest.TestCase):

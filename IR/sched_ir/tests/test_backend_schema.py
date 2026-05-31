@@ -18,6 +18,9 @@ def test_node_schema_contains_serialisable_backend_evaluation_fields():
     assert node["evaluated_comb_shape"] is None
     assert node["evaluated_n_ops"] is None
     assert node["evaluated_pipeline_stages"] is None
+    assert "kernel_type" not in node
+    assert "kernel_instance" not in node
+    assert "kernel_result" not in node
 
 
 def test_edge_schema_contains_backend_value_snapshot_fields():
@@ -27,12 +30,18 @@ def test_edge_schema_contains_backend_value_snapshot_fields():
     assert edge["evaluated_kifs"] is None
     assert edge["evaluated_shape"] is None
     assert edge["evaluated_latency"] is None
+    assert "lifetime" not in edge
+    assert "needs_buffer" not in edge
+    assert "mux_select" not in edge
 
 
-def test_graph_schema_marks_backend_evaluation_and_task_schedule():
+def test_graph_schema_marks_backend_evaluation_without_legacy_schedule_state():
     graph = default_graph_properties()
     assert graph["fold_plan"] is None
     assert graph["backend"] is None
     assert graph["backend_evaluated"] is False
     assert graph["backend_warnings"] is None
-    assert graph["task_schedule"] is None
+    assert "resource_yaml" not in graph
+    assert "task_schedule" not in graph
+    assert "makespan" not in graph
+    assert "critical_path" not in graph
