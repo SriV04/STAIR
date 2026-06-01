@@ -13,6 +13,10 @@ def default_node_properties() -> dict:
         "equation": None,
         "activation": None,
         "kernel_shape": None,
+        "dense_contract_axis": None,
+        "feature_axis": None,
+        "units": None,
+        "equation_synthesized": False,
         "has_bn": False,
         "bn_folded_into_qkernel": False,
 

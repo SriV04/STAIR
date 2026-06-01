@@ -6,6 +6,10 @@ def default_dense_params() -> dict:
         "op_type": "dense",
         "equation": None,
         "kernel_shape": None,
+        "dense_contract_axis": None,
+        "feature_axis": None,
+        "units": None,
+        "equation_synthesized": False,
         "input_shape": None,
         "output_shape": None,
         "kernel_values": None,
@@ -43,4 +47,3 @@ def default_dense_params() -> dict:
         "out_bw": None,
         "sparsity": None,
     }
-

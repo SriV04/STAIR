@@ -7,6 +7,20 @@ from typing import Any
 import numpy as np
 
 
+_DENSE_SPATIAL_LABELS = "nmpqrstuvwxyzadefghijklo"
+
+
+def standard_dense_equation(input_shape: tuple, output_shape: tuple) -> str | None:
+    """Return the explicit einsum equivalent for a last-axis Dense operation."""
+    if len(input_shape) < 1 or len(input_shape) != len(output_shape):
+        return None
+    spatial_rank = len(input_shape) - 1
+    if spatial_rank > len(_DENSE_SPATIAL_LABELS):
+        return "...c,cC->...C"
+    spatial = _DENSE_SPATIAL_LABELS[:spatial_rank]
+    return f"b{spatial}c,cC->b{spatial}C"
+
+
 def fold_spatial_max(value: np.ndarray, fold_factor: int) -> np.ndarray:
     """Collapse per-position precision metadata after spatial folding."""
     if value.ndim != 3:
@@ -45,6 +59,13 @@ def _relative_weight_path(variable, owner_layer) -> str | None:
     return "/".join(parts[parts.index(owner_layer.name) + 1 :])
 
 
+def _all_arrays_equal(values: list[np.ndarray]) -> bool:
+    if not values:
+        return False
+    first = values[0]
+    return all(np.array_equal(first, value) for value in values[1:])
+
+
 def copy_folded_layer_weights(
     source_layer,
     folded_layer,
@@ -79,6 +100,18 @@ def copy_folded_layer_weights(
         if len(path_matches) == 1:
             selected = path_matches[0]
         elif len(path_matches) > 1 or len(candidates) > 1:
+            if folded_value.shape == () and _all_arrays_equal([candidate[2] for candidate in candidates]):
+                copied.append(candidates[0][2])
+                log.append(
+                    {
+                        "new_index": folded_index,
+                        "new_name": folded_var.name,
+                        "new_shape": tuple(folded_value.shape),
+                        "old_index": None,
+                        "transform": "copy_equal_scalar",
+                    }
+                )
+                continue
             raise ValueError(
                 f"Ambiguous folded weight copy for {folded_var.name}:{folded_value.shape}"
             )
@@ -117,7 +150,7 @@ def copy_folded_layer_weights(
 
 
 def build_folded_entry_layer_model(source_layer, *, fold_factor: int):
-    """Rebuild the notebook's folded first HGQ einsum layer as a Keras model."""
+    """Rebuild the notebook's folded first HGQ dense/einsum layer as a Keras model."""
     import keras
     import hgq  # noqa: F401  # Registers HGQ custom layers for reconstruction.
 
@@ -140,15 +173,23 @@ def build_folded_entry_layer_model(source_layer, *, fold_factor: int):
         kwargs["bias_axes"] = source_layer.bias_axes
     if hasattr(source_layer, "activation"):
         kwargs["activation"] = source_layer.activation
+    equation = getattr(source_layer, "equation", None) or standard_dense_equation(input_shape, output_shape)
     folded_input = keras.Input(
         shape=(n_folded, channels_in),
         name=f"folded_input_f{fold_factor}",
     )
-    folded_layer = source_layer.__class__(
-        source_layer.equation,
-        (n_folded, output_shape[-1]),
-        **kwargs,
-    )
+    if getattr(source_layer, "equation", None) is not None:
+        folded_layer = source_layer.__class__(
+            equation,
+            (n_folded, output_shape[-1]),
+            **kwargs,
+        )
+    else:
+        folded_layer = source_layer.__class__(
+            output_shape[-1],
+            **kwargs,
+        )
+        folded_layer.equation = equation
     folded_output = folded_layer(folded_input)
     folded_model = keras.Model(
         inputs=folded_input,

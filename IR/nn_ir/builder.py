@@ -70,6 +70,36 @@ def _non_batch_volume(shape) -> int | None:
     return int(prod(dims))
 
 
+_DENSE_SPATIAL_LABELS = "nmpqrstuvwxyzadefghijklo"
+
+
+def _first_shape(shapes: list) -> tuple | None:
+    return tuple(shapes[0]) if shapes else None
+
+
+def _qdense_equation(in_shapes: list, out_shapes: list, kernel_shape: tuple | None) -> str | None:
+    """Represent a Keras Dense/QDense last-axis contraction as an einsum."""
+    in_shape = _first_shape(in_shapes)
+    out_shape = _first_shape(out_shapes)
+    if in_shape is None or out_shape is None or kernel_shape is None:
+        return None
+    if len(in_shape) < 2 or len(out_shape) != len(in_shape) or len(kernel_shape) != 2:
+        return None
+
+    in_features, units = kernel_shape
+    if in_shape[-1] is not None and in_features is not None and int(in_shape[-1]) != int(in_features):
+        return None
+    if out_shape[-1] is not None and units is not None and int(out_shape[-1]) != int(units):
+        return None
+
+    spatial_rank = len(in_shape) - 2
+    if spatial_rank > len(_DENSE_SPATIAL_LABELS):
+        return "...c,cC->...C"
+
+    spatial = _DENSE_SPATIAL_LABELS[:spatial_rank]
+    return f"b{spatial}c,cC->b{spatial}C"
+
+
 def _quant_summary_fields(summary: dict[str, Any] | None, prefix: str) -> dict[str, Any]:
     stats = {
         "avg": None,
@@ -99,6 +129,26 @@ def _quant_summary_fields(summary: dict[str, Any] | None, prefix: str) -> dict[s
         f"{prefix}_bw_shape": stats["shape"],
         f"{prefix}_overflow_mode": summary.get("overflow_mode") if summary else None,
         f"{prefix}_round_mode": summary.get("round_mode") if summary else None,
+    }
+
+
+def _dense_geometry(layer_class: str, in_shapes: list, out_shapes: list, kernel_shape: tuple | None) -> dict[str, Any]:
+    if layer_class != "QDense":
+        return {
+            "dense_contract_axis": None,
+            "feature_axis": None,
+            "units": None,
+            "equation_synthesized": False,
+        }
+    units = None
+    if kernel_shape is not None and len(kernel_shape) == 2 and kernel_shape[-1] is not None:
+        units = int(kernel_shape[-1])
+    return {
+        "dense_contract_axis": -1,
+        "feature_axis": -1,
+        "units": units,
+        "equation_synthesized": True,
+        "equation": _qdense_equation(in_shapes, out_shapes, kernel_shape),
     }
 
 
@@ -133,17 +183,24 @@ def _extract_record(
     stats = _hgq.weight_stats(values["kernel_values"], include_histogram=include_histograms)
     kernel_values = values["kernel_values"]
     kernel_shape = tuple(kernel_values.shape) if kernel_values is not None else None
+    layer_class = type(layer).__name__
+    dense_geometry = _dense_geometry(layer_class, in_shapes, out_shapes, kernel_shape)
+    equation = equation or dense_geometry.get("equation")
 
     record = {
         "layer_name": layer.name,
-        "layer_class": type(layer).__name__,
+        "layer_class": layer_class,
         "layer_idx": idx,
         "op_kind": _classify(layer),
         "equation": equation,
         "activation": activation,
         "kernel_shape": kernel_shape,
-        "has_bn": type(layer).__name__ == "QEinsumDenseBatchnorm",
-        "bn_folded_into_qkernel": bool(values["qkernel_values"] is not None and type(layer).__name__ == "QEinsumDenseBatchnorm"),
+        "dense_contract_axis": dense_geometry["dense_contract_axis"],
+        "feature_axis": dense_geometry["feature_axis"],
+        "units": dense_geometry["units"],
+        "equation_synthesized": bool(dense_geometry["equation_synthesized"] and equation is not None),
+        "has_bn": layer_class == "QEinsumDenseBatchnorm",
+        "bn_folded_into_qkernel": bool(values["qkernel_values"] is not None and layer_class == "QEinsumDenseBatchnorm"),
         "in_shapes": in_shapes,
         "out_shapes": out_shapes,
         "kernel_values": values["kernel_values"] if value_storage == "inline" else None,

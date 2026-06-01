@@ -215,6 +215,10 @@ def _lower_dense(p: dict) -> dict[str, Any]:
         {
             "equation": p.get("equation"),
             "kernel_shape": p.get("kernel_shape"),
+            "dense_contract_axis": p.get("dense_contract_axis"),
+            "feature_axis": p.get("feature_axis"),
+            "units": p.get("units"),
+            "equation_synthesized": bool(p.get("equation_synthesized")),
             "input_shape": _first(p.get("in_shapes")),
             "output_shape": _first(p.get("out_shapes")),
             "kernel_values": _first_not_none(

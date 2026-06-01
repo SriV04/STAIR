@@ -198,6 +198,10 @@ class HGQMetadataTests(unittest.TestCase):
         self.assertIsNotNone(dense_p["kq"])
         self.assertIsNotNone(dense_p["iq_kif"])
         self.assertIsNotNone(dense_p["iq_qint"])
+        self.assertEqual(dense_p["equation"], "bc,cC->bC")
+        self.assertEqual(dense_p["dense_contract_axis"], -1)
+        self.assertEqual(dense_p["feature_axis"], -1)
+        self.assertEqual(dense_p["units"], 2)
         self.assertEqual(dense_p["kernel_shape"], (4, 2))
         self.assertEqual(dense_p["iq_bw"], dense_p["iq_bw_avg"])
         self.assertEqual(dense_p["kq_bw"], dense_p["kq_bw_avg"])
@@ -212,6 +216,38 @@ class HGQMetadataTests(unittest.TestCase):
         self.assertEqual(edge_p["element_bitwidth_bits"], 4.0)
         self.assertEqual(edge_p["tensor_width_bits"], 16.0)
         self.assertEqual(edge_p["volume_bits"], 16.0)
+
+    def test_qdense_rank3_uses_standard_last_axis_einsum(self):
+        input_layer = InputLayer()
+        input_layer.name = "input_1"
+        input_layer.activation = None
+        input_tensor = FakeTensor((None, 8, 3), input_layer)
+        input_layer._inbound_nodes = [FakeNode([], [input_tensor])]
+
+        dense_layer = QDense()
+        dense_layer.name = "dense_1"
+        dense_layer.activation = None
+        dense_layer.kernel = np.ones((3, 64), dtype=np.float32)
+        dense_layer.qkernel = np.ones((3, 64), dtype=np.float32)
+        dense_layer._inbound_nodes = [FakeNode([input_tensor], [FakeTensor((None, 8, 64), dense_layer)])]
+        dense_layer.count_params = lambda: 192
+
+        model = type("FakeModel", (), {})()
+        model.name = "fake_rank3_model"
+        model.layers = [input_layer, dense_layer]
+        model.input_shape = (None, 8, 3)
+        model.output_shape = (None, 8, 64)
+
+        graph = builder.build_nn_ir(model, name="fake_rank3_nn_ir")
+
+        dense_vx = next(vx for vx in graph.vertices if graph.pmap[vx]["layer_name"] == "dense_1")
+        dense_p = graph.pmap[dense_vx]
+
+        self.assertEqual(dense_p["op_kind"], "dense")
+        self.assertEqual(dense_p["equation"], "bnc,cC->bnC")
+        self.assertEqual(dense_p["dense_contract_axis"], -1)
+        self.assertEqual(dense_p["feature_axis"], -1)
+        self.assertEqual(dense_p["units"], 64)
 
 
 if __name__ == "__main__":

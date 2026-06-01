@@ -162,8 +162,11 @@ def main():
     print(f"{'='*70}")
     
     # Model path from api.py
-    model_path = Path("official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras")
-    
+    # model_path = Path("official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras")
+    model_path = Path("official_models/deepset/epoch=999-acc=61.02%-val_acc=61.95%-EBOPs=16292.keras")
+    # linformer
+    # model_path = Path("official_models/linformers/mha16part.keras")
+
     try:
         # Step 1: Load model
         model = load_keras_model(model_path)

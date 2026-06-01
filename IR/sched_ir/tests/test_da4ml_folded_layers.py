@@ -4,6 +4,7 @@ import pytest
 from IR.sched_ir.backends.da4ml.folded_layers import (
     copy_folded_layer_weights,
     fold_spatial_max,
+    standard_dense_equation,
 )
 
 
@@ -36,6 +37,11 @@ def test_fold_spatial_max_matches_notebook_precision_collapse():
         folded,
         source.reshape(1, 4, 2, 3).max(axis=2),
     )
+
+
+def test_standard_dense_equation_matches_qdense_last_axis_contract():
+    assert standard_dense_equation((4,), (2,)) == "bc,cC->bC"
+    assert standard_dense_equation((8, 3), (8, 64)) == "bnc,cC->bnC"
 
 
 def test_copy_folded_layer_weights_matches_relative_quantizer_path():
@@ -75,3 +81,23 @@ def test_copy_folded_layer_weights_rejects_ambiguous_equal_name_matches():
 
     with pytest.raises(ValueError, match="Ambiguous folded weight copy"):
         copy_folded_layer_weights(source, folded, fold_factor=2)
+
+
+def test_copy_folded_layer_weights_copies_ambiguous_equal_scalar_state():
+    source = FakeLayer(
+        "dense",
+        [
+            FakeVar("i_decay_speed", None, np.array(0.5)),
+            FakeVar("i_decay_speed", None, np.array(0.5)),
+        ],
+    )
+    folded = FakeLayer(
+        "dense_folded",
+        [FakeVar("i_decay_speed", None, np.array(0.0))],
+    )
+
+    log = copy_folded_layer_weights(source, folded, fold_factor=2)
+
+    assert log[0]["transform"] == "copy_equal_scalar"
+    assert log[0]["old_index"] is None
+    np.testing.assert_array_equal(folded.received[0], np.array(0.5))
