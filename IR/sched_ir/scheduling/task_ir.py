@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -18,12 +19,13 @@ class ResourceInstance:
 class Task:
     task_id: str
     source_node: int
-    temporal_step: int
+    temporal_step: int | None
     resource_id: str
     input_tokens: list[str]
     output_tokens: list[str]
     latency: int
     ii: int
+    task_kind: Literal["compute", "temporal_accumulator"] = "compute"
 
 
 @dataclass

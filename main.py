@@ -160,13 +160,14 @@ def main():
     print(f"{'='*70}")
     
     # Model path from api.py
-    # model_path = Path("official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras")
-    # model_path = Path("official_models/deepset/epoch=999-acc=61.02%-val_acc=61.95%-EBOPs=16292.keras")
+    model_path = Path("official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras")
+    # model_path = Path("official_models/deepset/epoch=890-acc=69.51%-val_acc=70.03%-EBOPs=146212.keras")
+    # model_path = Path("official_models/deepset/epoch=490-acc=68.93%-val_acc=69.57%-EBOPs=80935.keras")
     # linformer
     # model_path = Path("official_models/linformers/lin8part.keras")
 
     # 64 particle model 
-    model_path = Path("official_models/3-feature-perminv/jet_classifier_large_64/ckpts/epoch=1294-acc=81.65%-val_acc=81.64%-EBOPs=226791.keras")
+    # model_path = Path("official_models/3-feature-perminv/jet_classifier_large_64/ckpts/epoch=1294-acc=81.65%-val_acc=81.64%-EBOPs=226791.keras")
 
     try:
         # Step 1: Load model
@@ -192,7 +193,7 @@ def main():
         webview.add_graph(nn_graph, title="NN-IR Graph")
         webview.add_graph(design.sched_graph, title="Scheduled Graph")
         webview.add_graph(design.task_graph, title="Task Graph")
-        webview.run(host="127.0.0.1", port="8888")
+        webview.run(host="127.0.0.1", port="8889")
 
         
         print(f"\n{'='*70}")

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from math import prod
 from typing import Any
 
+import numpy as np
+
 from .records import ScheduledTrace, SymbolicTokenValue
 from .reductions import reduce_scheduled_values
 
@@ -88,6 +90,19 @@ def _symbolic_add(left, right):
     return left + right
 
 
+def _qints_from_symbolic_value(value) -> list[Any]:
+    if hasattr(value, "qint"):
+        return [value.qint]
+    try:
+        arr = np.asarray(value, dtype=object)
+    except Exception:
+        return []
+    if arr.shape == ():
+        item = arr.item()
+        return [item.qint] if hasattr(item, "qint") else []
+    return [item.qint for item in arr.reshape(-1) if hasattr(item, "qint")]
+
+
 def _terminal_tokens(task_graph, produced_tokens):
     consumed = {
         token
@@ -133,6 +148,37 @@ def build_scheduled_trace(evaluation, task_graph, schedule) -> ScheduledTrace:
     for scheduled in schedule.tasks.values():
         task = scheduled.task
         node = evaluation.graph.pmap[task.source_node]
+        if task.task_kind == "temporal_accumulator":
+            input_tokens = [token_values[token_id] for token_id in task.input_tokens]
+            ordered = sorted(input_tokens, key=lambda token: token.temporal_step or 0)
+            accumulated = reduce_scheduled_values(
+                [token.value for token in ordered],
+                mode=node.get("reduce_mode"),
+                reducer=_symbolic_add,
+            )
+            qints = _qints_from_symbolic_value(accumulated)
+            if not qints:
+                qints = [
+                    qint
+                    for token in ordered
+                    for qint in token.qints
+                    if not getattr(qint, "neutral", False)
+                ]
+            shape = ordered[0].shape if ordered else (node.get("evaluated_output_shapes") or [None])[0]
+            for token_id in task.output_tokens:
+                produced_tokens.append(token_id)
+                token_values[token_id] = SymbolicTokenValue(
+                    token_id=token_id,
+                    source_node=task.source_node,
+                    temporal_step=None,
+                    logical_slice=None,
+                    value=accumulated,
+                    qints=qints,
+                    shape=shape,
+                    ready_cycle=scheduled.end,
+                )
+            continue
+
         trace_id = node.get("backend_trace_id")
         artifact = evaluation.runtime_artifacts[trace_id]
         outputs = list(getattr(artifact, "symbolic_outputs", []) or [])

@@ -29,6 +29,14 @@ def _tokens_for(base: str, count: int) -> list[str]:
     return [base] if count == 1 else [f"{base}:t{step}" for step in range(count)]
 
 
+def _needs_temporal_accumulator(node: dict, steps: int) -> bool:
+    return (
+        node.get("op") == "reduce"
+        and node.get("reduce_mode") in {"hybrid", "temporal_accumulate"}
+        and steps > 1
+    )
+
+
 def expand_tasks(evaluated_graph) -> TaskGraph:
     """Create task executions for fixed resources using graph edge identity."""
     tasks = {}
@@ -60,7 +68,9 @@ def expand_tasks(evaluated_graph) -> TaskGraph:
             if outgoing and outgoing[0].get("value_id") is not None
             else f"{node_id}:out"
         )
-        node_outputs = _tokens_for(output_base, steps)
+        needs_accumulator = _needs_temporal_accumulator(node, steps)
+        partial_outputs = _tokens_for(f"{node_id}:partial", steps) if needs_accumulator else None
+        node_outputs = [output_base] if needs_accumulator else _tokens_for(output_base, steps)
         output_tokens[node_id] = node_outputs
 
         for step in range(steps):
@@ -78,7 +88,7 @@ def expand_tasks(evaluated_graph) -> TaskGraph:
                         inputs.append(source_tokens[step])
                     else:
                         inputs.extend(source_tokens)
-            outputs = [node_outputs[step]]
+            outputs = [partial_outputs[step] if partial_outputs is not None else node_outputs[step]]
             task_id = f"{resource_id}:t{step}" if steps > 1 else resource_id
             tasks[task_id] = Task(
                 task_id,
@@ -89,6 +99,37 @@ def expand_tasks(evaluated_graph) -> TaskGraph:
                 outputs,
                 latency,
                 ii,
+            )
+
+        if needs_accumulator:
+            accumulator_resource_id = f"{resource_id}:acc"
+            accumulator_cost = {
+                "lut": 0,
+                "ff": 0,
+                "dsp": 0,
+                "bram": 0,
+                "latency_cycles": 1,
+                "ii": 1,
+                "cost_mode": "synthetic_temporal_accumulator",
+            }
+            resources[accumulator_resource_id] = ResourceInstance(
+                accumulator_resource_id,
+                node_id,
+                accumulator_cost,
+                1,
+                1,
+            )
+            accumulator_task_id = f"{resource_id}:acc"
+            tasks[accumulator_task_id] = Task(
+                accumulator_task_id,
+                node_id,
+                None,
+                accumulator_resource_id,
+                list(partial_outputs),
+                list(node_outputs),
+                1,
+                1,
+                task_kind="temporal_accumulator",
             )
 
     return TaskGraph(tasks, resources, initial_tokens)
