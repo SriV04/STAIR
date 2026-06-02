@@ -42,10 +42,17 @@ class FoldedCostChainExecutor:
         self.runtime_artifacts: dict[str, DA4MLNodeArtifact] = {}
 
     def _layer_for(self, node_properties):
+        if node_properties.get("keras_layer") is not None:
+            return node_properties.get("keras_layer")
         if self.model is None:
             return None
         name = node_properties.get("nn_layer_name")
-        return self.model.get_layer(name) if name is not None else None
+        if name is None:
+            return None
+        try:
+            return self.model.get_layer(name)
+        except ValueError:
+            return None
 
     def _incoming_states(self, graph, node_id) -> list[SymbolicTensorState]:
         states = []

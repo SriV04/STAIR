@@ -256,6 +256,50 @@ class DecomposerMetadataTests(unittest.TestCase):
         self.assertEqual(params["op"], "add")
         self.assertEqual(params["elementwise_op"], "add")
 
+    def test_reduce_lowering_prefers_explicit_qsum_axis_for_ambiguous_shapes(self):
+        nn_g = FakeHGraph()
+        nn_g.pmap["name"] = "fake_nn"
+
+        src = nn_g.add_vx()
+        reduction = nn_g.add_vx()
+        nn_g.vertices = [src, reduction]
+
+        nn_g.pmap[src] = {
+            "layer_idx": 0,
+            "layer_name": "dense",
+            "op_kind": "dense",
+            "in_shapes": [(None, 64, 64)],
+            "out_shapes": [(None, 64, 64)],
+            "kernel_shape": (64, 64),
+            "kernel_values": np.eye(64, dtype=np.float32),
+            "iq_bw_avg": 4.0,
+            "kq_bw_avg": 2.0,
+        }
+        nn_g.pmap[reduction] = {
+            "layer_idx": 1,
+            "layer_name": "q_sum_1",
+            "op_kind": "qsum",
+            "axis": (1,),
+            "scale": 1.0,
+            "keepdims": False,
+            "in_shapes": [(None, 64, 64)],
+            "out_shapes": [(None, 64)],
+            "iq_bw_avg": 4.0,
+        }
+
+        edge = (src, reduction)
+        nn_g.edges = [edge]
+        nn_g.pmap[edge] = {"tensor_shape": (None, 64, 64)}
+
+        sg = decomposer.decompose_nn_to_sched(nn_g, name="fake_sched")
+        reduce_vx = next(vx for vx in sg.vertices if sg.pmap[vx]["nn_layer_name"] == "q_sum_1")
+        params = sg.pmap[reduce_vx]["op_params"]
+
+        self.assertEqual(params["axes"], [1])
+        self.assertEqual(params["reduction_width"], 64)
+        self.assertFalse(params["keepdims"])
+        self.assertEqual(params["scale"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

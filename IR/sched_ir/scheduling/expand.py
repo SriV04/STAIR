@@ -71,7 +71,10 @@ def expand_tasks(evaluated_graph) -> TaskGraph:
                 inputs = []
                 for source, edge in incoming:
                     source_tokens = output_tokens[source]
-                    if len(source_tokens) == steps and steps > 1:
+                    consume_mode = edge.get("consume_mode") or "stepwise"
+                    if consume_mode == "all":
+                        inputs.extend(source_tokens)
+                    elif len(source_tokens) == steps and steps > 1:
                         inputs.append(source_tokens[step])
                     else:
                         inputs.extend(source_tokens)

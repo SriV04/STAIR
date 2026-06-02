@@ -24,6 +24,7 @@ def default_edge_properties() -> dict:
         "has_quantization_boundary": False,
         "producer_quantizer": None,
         "consumer_quantizer": None,
+        "consume_mode": "stepwise",
         "needs_cast": False,
         "cast_mode": None,
 

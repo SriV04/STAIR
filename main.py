@@ -57,13 +57,11 @@ def build_nn_ir_graph(model):
 
 def evaluate_folded_design(nn_graph, model, fold_factor=2):
     """Evaluate folded design with given fold factor."""
-    hardware_lanes = fold_factor * 2  # fold_factor=2 -> 4 lanes
-    
+
     print(f"\n{'='*70}")
     print(f"Evaluating Folded Design")
     print(f"{'='*70}")
     print(f"Fold Factor: {fold_factor}")
-    print(f"Hardware Lanes: {hardware_lanes}")
     
     design = api.evaluate_folded_design(
         nn_graph,
@@ -163,9 +161,12 @@ def main():
     
     # Model path from api.py
     # model_path = Path("official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras")
-    model_path = Path("official_models/deepset/epoch=999-acc=61.02%-val_acc=61.95%-EBOPs=16292.keras")
+    # model_path = Path("official_models/deepset/epoch=999-acc=61.02%-val_acc=61.95%-EBOPs=16292.keras")
     # linformer
-    # model_path = Path("official_models/linformers/mha16part.keras")
+    # model_path = Path("official_models/linformers/lin8part.keras")
+
+    # 64 particle model 
+    model_path = Path("official_models/3-feature-perminv/jet_classifier_large_64/ckpts/epoch=1294-acc=81.65%-val_acc=81.64%-EBOPs=226791.keras")
 
     try:
         # Step 1: Load model
@@ -174,7 +175,7 @@ def main():
         # Step 2: Build NN-IR
         nn_graph = build_nn_ir_graph(model)
         
-        # Step 3: Evaluate folded design (fold_factor=2 -> 4 lanes)
+        # Step 3: Evaluate folded design
         design = evaluate_folded_design(nn_graph, model, fold_factor=2)
 
         apply_nn_style(nn_graph)
@@ -195,13 +196,13 @@ def main():
 
         
         print(f"\n{'='*70}")
-        print(f"✅ PIPELINE COMPLETED SUCCESSFULLY")
+        print(f" PIPELINE COMPLETED SUCCESSFULLY")
         print(f"{'='*70}\n")
         
         return 0
         
     except Exception as e:
-        print(f"\n❌ PIPELINE FAILED: {e}")
+        print(f"\n PIPELINE FAILED: {e}")
         import traceback
         traceback.print_exc()
         return 1

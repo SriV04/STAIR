@@ -117,6 +117,7 @@ class FakeNode:
 
 InputLayer = type("InputLayer", (), {})
 QDense = type("QDense", (), {})
+QSum = type("QSum", (), {})
 
 
 class HGQMetadataTests(unittest.TestCase):
@@ -216,6 +217,38 @@ class HGQMetadataTests(unittest.TestCase):
         self.assertEqual(edge_p["element_bitwidth_bits"], 4.0)
         self.assertEqual(edge_p["tensor_width_bits"], 16.0)
         self.assertEqual(edge_p["volume_bits"], 16.0)
+
+    def test_build_nn_ir_preserves_qsum_axes_scale_and_keepdims(self):
+        input_layer = InputLayer()
+        input_layer.name = "input_1"
+        input_layer.activation = None
+        input_tensor = FakeTensor((None, 64, 64), input_layer)
+        input_layer._inbound_nodes = [FakeNode([], [input_tensor])]
+
+        sum_layer = QSum()
+        sum_layer.name = "q_sum_1"
+        sum_layer.activation = None
+        sum_layer.axes = (1,)
+        sum_layer.scale = 1.0
+        sum_layer.keepdims = False
+        sum_layer._inbound_nodes = [FakeNode([input_tensor], [FakeTensor((None, 64), sum_layer)])]
+        sum_layer.count_params = lambda: 0
+
+        model = type("FakeModel", (), {})()
+        model.name = "fake_qsum_model"
+        model.layers = [input_layer, sum_layer]
+        model.input_shape = (None, 64, 64)
+        model.output_shape = (None, 64)
+
+        graph = builder.build_nn_ir(model, name="fake_qsum_nn_ir")
+
+        sum_vx = next(vx for vx in graph.vertices if graph.pmap[vx]["layer_name"] == "q_sum_1")
+        sum_p = graph.pmap[sum_vx]
+
+        self.assertEqual(sum_p["op_kind"], "qsum")
+        self.assertEqual(sum_p["axis"], (1,))
+        self.assertEqual(sum_p["scale"], 1.0)
+        self.assertFalse(sum_p["keepdims"])
 
     def test_qdense_rank3_uses_standard_last_axis_einsum(self):
         input_layer = InputLayer()

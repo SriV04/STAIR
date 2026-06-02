@@ -28,7 +28,10 @@ from ..types.op_params import (
     default_activation_params,
     default_dense_params,
     default_elementwise_params,
+    default_einsum_params,
     default_reduce_params,
+    default_softmax_params,
+    default_transport_params,
 )
 
 
@@ -37,6 +40,9 @@ _OP_PARAM_DEFAULTS = {
     "reduce": default_reduce_params,
     "elementwise": default_elementwise_params,
     "activation": default_activation_params,
+    "einsum": default_einsum_params,
+    "softmax": default_softmax_params,
+    "transport": default_transport_params,
 }
 
 
@@ -143,6 +149,23 @@ def _infer_reduction(in_shape, out_shape) -> tuple[list[int] | None, int | None,
     return axes, (width if width > 1 else None), keepdims
 
 
+def _explicit_reduction_axes(value) -> list[int] | None:
+    if value is None:
+        return None
+    axes = list(value) if isinstance(value, (list, tuple, set)) else [value]
+    return [int(axis) for axis in axes]
+
+
+def _reduction_width_from_axes(in_shape, axes: list[int] | None) -> int | None:
+    if in_shape is None or not axes:
+        return None
+    width = 1
+    for axis in axes:
+        if 0 <= axis < len(in_shape) and in_shape[axis] is not None:
+            width *= int(in_shape[axis])
+    return width if width > 1 else None
+
+
 def _infer_broadcast(in_shapes, out_shape) -> dict[int, list[int]] | None:
     """For each input port, return the axes that are broadcast (size 1 → size N)."""
     if not in_shapes or out_shape is None:
@@ -156,7 +179,7 @@ def _infer_broadcast(in_shapes, out_shape) -> dict[int, list[int]] | None:
             result[port] = axes
     return result or None
 
-
+#TODO: fold axis is dependent on the einsum equation and shapes of inputs 
 def _guess_fold_axes(in_shape) -> list[int] | None:
     """Cheap fold-axis detection — returns tensor dimension indices.
 
@@ -271,7 +294,12 @@ def _lower_reduce(p: dict) -> dict[str, Any]:
     params = _OP_PARAM_DEFAULTS["reduce"]()
     in_shape = _first(p.get("in_shapes"))
     out_shape = _first(p.get("out_shapes"))
-    axes, width, keepdims = _infer_reduction(in_shape, out_shape)
+    inferred_axes, inferred_width, inferred_keepdims = _infer_reduction(in_shape, out_shape)
+    axes = _explicit_reduction_axes(p.get("axis")) or inferred_axes
+    width = _reduction_width_from_axes(in_shape, axes) or inferred_width
+    keepdims = p.get("keepdims")
+    if keepdims is None:
+        keepdims = inferred_keepdims
     in_bw = _legacy_bw_from_nn(p, "iq")
     mode = "sum" if p.get("op_kind") == "qsum" else "N/A - ERROR"  # default to sum if not specified
     params.update(
@@ -293,7 +321,7 @@ def _lower_reduce(p: dict) -> dict[str, Any]:
             "reduce_mode": "spatial",
             "spatial_width_P": None,
             "temporal_steps_T": None,
-            "scale": None,
+            "scale": p.get("scale"),
             "scale_qint": None,
             "scale_kif": None,
             "in_shape": in_shape,
@@ -362,6 +390,78 @@ def _lower_activation(p: dict) -> dict[str, Any]:
     return params
 
 
+def _lower_einsum(p: dict) -> dict[str, Any]:
+    params = _OP_PARAM_DEFAULTS["einsum"]()
+    params.update(
+        {
+            "equation": p.get("equation"),
+            "input_shapes": p.get("in_shapes") or [],
+            "output_shape": _first(p.get("out_shapes")),
+            "input_qints": p.get("input_qints"),
+            "input_kifs": p.get("input_kifs"),
+            "output_qint": _first_not_none(p.get("output_qint"), p.get("oq_qint")),
+            "output_kif": _first_not_none(p.get("output_kif"), p.get("oq_kif")),
+            "dynamic_weight": True,
+            "foldable": False,
+            "cost_model": p.get("cost_mode") or "synthetic_zero",
+            "cost_mode": p.get("cost_mode") or "synthetic_zero",
+            "in_bws": p.get("input_bws"),
+            "out_bw": _first_not_none(_legacy_bw_from_nn(p, "oq"), p.get("out_bw")),
+        }
+    )
+    return params
+
+
+def _lower_softmax(p: dict) -> dict[str, Any]:
+    params = _OP_PARAM_DEFAULTS["softmax"]()
+    in_shape = _first(p.get("in_shapes"))
+    out_shape = _first(p.get("out_shapes"))
+    in_bw = _legacy_bw_from_nn(p, "iq")
+    params.update(
+        {
+            "axis": p.get("axis"),
+            "input_shape": in_shape,
+            "output_shape": out_shape,
+            "input_qint": p.get("iq_qint"),
+            "input_kif": p.get("iq_kif"),
+            "output_qint": _first_not_none(p.get("output_qint"), p.get("oq_qint")),
+            "output_kif": _first_not_none(p.get("output_kif"), p.get("oq_kif")),
+            "implementation": "lookup_table",
+            "stable": p.get("stable", True),
+            "foldable": False,
+            "cost_model": p.get("cost_mode") or "synthetic_zero",
+            "cost_mode": p.get("cost_mode") or "synthetic_zero",
+            "in_bw": in_bw,
+            "out_bw": _first_not_none(_legacy_bw_from_nn(p, "oq"), in_bw),
+        }
+    )
+    return params
+
+
+def _lower_transport(p: dict) -> dict[str, Any]:
+    params = _OP_PARAM_DEFAULTS["transport"]()
+    in_shape = _first(p.get("in_shapes"))
+    out_shape = _first(p.get("out_shapes"))
+    in_bw = _legacy_bw_from_nn(p, "iq")
+    params.update(
+        {
+            "mode": p.get("op_kind"),
+            "input_shape": in_shape,
+            "output_shape": out_shape,
+            "input_qint": p.get("iq_qint"),
+            "input_kif": p.get("iq_kif"),
+            "output_qint": _first_not_none(p.get("oq_qint"), p.get("iq_qint")),
+            "output_kif": _first_not_none(p.get("oq_kif"), p.get("iq_kif")),
+            "foldable": False,
+            "cost_model": p.get("cost_mode") or "synthetic_zero",
+            "cost_mode": p.get("cost_mode") or "synthetic_zero",
+            "in_bw": in_bw,
+            "out_bw": _first_not_none(_legacy_bw_from_nn(p, "oq"), in_bw),
+        }
+    )
+    return params
+
+
 _LOWERING = {
     "einsum_dense_bn": ("dense",       _lower_dense),
     "einsum_dense":    ("dense",       _lower_dense),
@@ -369,6 +469,9 @@ _LOWERING = {
     "qsum":            ("reduce",      _lower_reduce),
     "qadd":            ("elementwise", _lower_elementwise),
     "activation":      ("activation",  _lower_activation),
+    "einsum":          ("einsum",      _lower_einsum),
+    "softmax":         ("softmax",     _lower_softmax),
+    "flatten":         ("transport",   _lower_transport),
 }
 
 
@@ -411,6 +514,21 @@ def _apply_node_precision_from_params(sp: dict, params: dict, prim: str):
         in_kifs = [params.get("input_kif")] if params.get("input_kif") is not None else None
         out_qints = [params.get("output_qint")] if params.get("output_qint") is not None else None
         out_kifs = [params.get("output_kif")] if params.get("output_kif") is not None else None
+    elif prim == "einsum":
+        in_qints = params.get("input_qints")
+        in_kifs = params.get("input_kifs")
+        out_qints = [params.get("output_qint")] if params.get("output_qint") is not None else None
+        out_kifs = [params.get("output_kif")] if params.get("output_kif") is not None else None
+    elif prim == "softmax":
+        in_qints = [params.get("input_qint")] if params.get("input_qint") is not None else None
+        in_kifs = [params.get("input_kif")] if params.get("input_kif") is not None else None
+        out_qints = [params.get("output_qint")] if params.get("output_qint") is not None else None
+        out_kifs = [params.get("output_kif")] if params.get("output_kif") is not None else None
+    elif prim == "transport":
+        in_qints = [params.get("input_qint")] if params.get("input_qint") is not None else None
+        in_kifs = [params.get("input_kif")] if params.get("input_kif") is not None else None
+        out_qints = [params.get("output_qint")] if params.get("output_qint") is not None else None
+        out_kifs = [params.get("output_kif")] if params.get("output_kif") is not None else None
 
     sp["input_qints"] = in_qints
     sp["input_kifs"] = in_kifs
@@ -435,6 +553,7 @@ _EDGE_COPY_FIELDS = [
     "has_quantization_boundary",
     "producer_quantizer",
     "consumer_quantizer",
+    "consume_mode",
     "needs_cast",
     "cast_mode",
     "bitwidth_src",
@@ -482,6 +601,23 @@ def _sync_op_params_inputs(p: dict):
             params["input_qint"] = p["input_qints"][0]
         if p.get("input_kifs"):
             params["input_kif"] = p["input_kifs"][0]
+    elif op == "einsum":
+        params["input_qints"] = p.get("input_qints")
+        params["input_kifs"] = p.get("input_kifs")
+    elif op == "softmax":
+        if p.get("input_qints"):
+            params["input_qint"] = p["input_qints"][0]
+        if p.get("input_kifs"):
+            params["input_kif"] = p["input_kifs"][0]
+    elif op == "transport":
+        if p.get("input_qints"):
+            params["input_qint"] = p["input_qints"][0]
+            params["output_qint"] = params.get("output_qint") or p["input_qints"][0]
+            p["output_qints"] = [params["output_qint"]]
+        if p.get("input_kifs"):
+            params["input_kif"] = p["input_kifs"][0]
+            params["output_kif"] = params.get("output_kif") or p["input_kifs"][0]
+            p["output_kifs"] = [params["output_kif"]]
 
 
 def _refresh_node_inputs_from_edges(g: HGraph):
@@ -538,6 +674,7 @@ def decompose_nn_to_sched(nn_g: HGraph, name: str | None = None) -> HGraph:
     nn_to_sched: dict[int, int | None] = {}
     for nn_vx in nn_g.vertices:
         p = nn_g.pmap[nn_vx]
+        # 
         prim, params = _lower_vertex(p)
         if prim is None:
             nn_to_sched[nn_vx] = None
@@ -554,7 +691,10 @@ def decompose_nn_to_sched(nn_g: HGraph, name: str | None = None) -> HGraph:
         sp["inserted_by"]   = "decomposer"
         sp["op"]            = prim
         sp["op_params"]     = params
-        sp["fold_axes"]     = _guess_fold_axes(_first(p.get("in_shapes")))
+        sp["foldable"]      = bool(p.get("foldable", prim not in {"einsum", "softmax", "transport"}))
+        sp["cost_mode"]     = p.get("cost_mode")
+        sp["keras_layer"]   = p.get("keras_layer")
+        sp["fold_axes"]     = _guess_fold_axes(_first(p.get("in_shapes"))) if sp["foldable"] else None
         _apply_node_precision_from_params(sp, params, prim)
 
         # Reduction-specific default: spatial tree until the scheduler
@@ -578,6 +718,8 @@ def decompose_nn_to_sched(nn_g: HGraph, name: str | None = None) -> HGraph:
         ep = nn_g.pmap[nn_edge]
         sp = sg.pmap[e]
         _copy_edge_precision(ep, sp)
+        if sg.pmap[t].get("op") in {"einsum", "softmax", "transport"}:
+            sp["consume_mode"] = "all"
 
     _refresh_node_inputs_from_edges(sg)
 

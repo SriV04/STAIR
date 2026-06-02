@@ -8,6 +8,7 @@ import warnings
 
 from heterograph import HGraph
 from . import schema as _schema
+from .hgq2.attention_lowering import AttentionEdgeSpec, is_attention_layer, lower_attention_layer
 from .hgq2 import hgq_extractor as _hgq
 
 vinit_nn = _schema.vinit_nn
@@ -23,6 +24,7 @@ _OP_KIND = {
     "QSum": "qsum",
     "QAdd": "qadd",
     "Activation": "activation",
+    "Flatten": "flatten",
 }
 
 
@@ -152,6 +154,23 @@ def _dense_geometry(layer_class: str, in_shapes: list, out_shapes: list, kernel_
     }
 
 
+def _reduction_metadata(layer_class: str, layer) -> dict[str, Any]:
+    if layer_class != "QSum":
+        return {
+            "axis": None,
+            "scale": None,
+            "keepdims": None,
+        }
+    axes = getattr(layer, "axes", None)
+    if axes is not None and not isinstance(axes, tuple):
+        axes = tuple(axes) if isinstance(axes, (list, set)) else (axes,)
+    return {
+        "axis": axes,
+        "scale": getattr(layer, "scale", None),
+        "keepdims": getattr(layer, "keepdims", None),
+    }
+
+
 def _extract_record(
     layer,
     idx: int,
@@ -185,6 +204,7 @@ def _extract_record(
     kernel_shape = tuple(kernel_values.shape) if kernel_values is not None else None
     layer_class = type(layer).__name__
     dense_geometry = _dense_geometry(layer_class, in_shapes, out_shapes, kernel_shape)
+    reduction_metadata = _reduction_metadata(layer_class, layer)
     equation = equation or dense_geometry.get("equation")
 
     record = {
@@ -195,10 +215,15 @@ def _extract_record(
         "equation": equation,
         "activation": activation,
         "kernel_shape": kernel_shape,
+        "axis": reduction_metadata["axis"],
+        "scale": reduction_metadata["scale"],
+        "keepdims": reduction_metadata["keepdims"],
         "dense_contract_axis": dense_geometry["dense_contract_axis"],
         "feature_axis": dense_geometry["feature_axis"],
         "units": dense_geometry["units"],
         "equation_synthesized": bool(dense_geometry["equation_synthesized"] and equation is not None),
+        "foldable": layer_class != "Flatten",
+        "cost_mode": "synthetic_zero" if layer_class == "Flatten" else None,
         "has_bn": layer_class == "QEinsumDenseBatchnorm",
         "bn_folded_into_qkernel": bool(values["qkernel_values"] is not None and layer_class == "QEinsumDenseBatchnorm"),
         "in_shapes": in_shapes,
@@ -300,6 +325,234 @@ def _validate(g: HGraph) -> None:
             warnings.warn(f"NN-IR edge {edge} has no precision metadata", stacklevel=2)
 
 
+def _override_record_from_attention_spec(record: dict[str, Any], spec, parent_name: str) -> dict[str, Any]:
+    record.update(
+        {
+            "layer_name": spec.name,
+            "layer_idx": record.get("layer_idx"),
+            "op_kind": spec.op_kind,
+            "equation": spec.equation or record.get("equation"),
+            "in_shapes": spec.in_shapes,
+            "out_shapes": spec.out_shapes,
+            "foldable": bool(spec.foldable),
+            "dynamic_weight": bool(spec.dynamic_weight),
+            "cost_mode": spec.cost_mode,
+            "compound_parent": parent_name,
+            "attention_role": spec.role,
+            "keras_layer": spec.source_layer,
+        }
+    )
+    return record
+
+
+def _nonparam_attention_record(spec, layer_idx: int, parent_name: str) -> dict[str, Any]:
+    qmeta = _hgq.extract_all_quantizers(spec.source_layer) if spec.source_layer is not None else {
+        "iq": None,
+        "kq": None,
+        "bq": None,
+        "oq": None,
+        "aq": None,
+    }
+    record = {
+        "layer_name": spec.name,
+        "layer_class": type(spec.source_layer).__name__ if spec.source_layer is not None else f"Synthetic{spec.op_kind.title()}",
+        "layer_idx": layer_idx,
+        "op_kind": spec.op_kind,
+        "equation": spec.equation,
+        "activation": None,
+        "kernel_shape": None,
+        "axis": spec.axis,
+        "stable": spec.stable,
+        "input_qints": None,
+        "input_kifs": None,
+        "output_qint": None,
+        "output_kif": None,
+        "foldable": bool(spec.foldable),
+        "dynamic_weight": bool(spec.dynamic_weight),
+        "cost_mode": spec.cost_mode,
+        "compound_parent": parent_name,
+        "attention_role": spec.role,
+        "keras_layer": spec.source_layer,
+        "dense_contract_axis": None,
+        "feature_axis": None,
+        "units": None,
+        "equation_synthesized": False,
+        "has_bn": False,
+        "bn_folded_into_qkernel": False,
+        "in_shapes": spec.in_shapes,
+        "out_shapes": spec.out_shapes,
+        "kernel_values": None,
+        "kernel_float_values": None,
+        "bias_values": None,
+        "batchnorm_values": None,
+        "qkernel_values": None,
+        "qbias_values": None,
+        "uses_qkernel": False,
+        "num_params": 0,
+        "quantizer_granularity": None,
+        "quantizer_place": "layer",
+        "quantizer_source": "HGQ" if spec.source_layer is not None else "synthetic",
+        "kernel_sparsity": None,
+        "kernel_nonzero_count": None,
+        "kernel_zero_count": None,
+        "kernel_unique_values": None,
+        "kernel_unique_count": None,
+        "kernel_value_histogram": None,
+        "kernel_min": None,
+        "kernel_max": None,
+        "kernel_dtype": None,
+    }
+    record.update(_quant_summary_fields(qmeta["iq"], "iq"))
+    record.update(_quant_summary_fields(qmeta["kq"], "kq"))
+    record.update(_quant_summary_fields(qmeta["bq"], "bq"))
+    record.update(_quant_summary_fields(qmeta["oq"], "oq"))
+    record["aq"] = qmeta["aq"]
+    record["iq_bw"] = record["iq_bw_avg"]
+    record["kq_bw"] = record["kq_bw_avg"]
+    record["bq_bw"] = record["bq_bw_avg"]
+    record["iq_bw_per_param"] = None
+    record["kq_bw_per_param"] = None
+    record["sparsity"] = None
+    record["weights"] = None
+    record["biases"] = None
+    return record
+
+
+def _output_qint(record: dict[str, Any]):
+    return _edge_qint(record, "src") or record.get("output_qint") or record.get("oq_qint")
+
+
+def _output_kif(record: dict[str, Any]):
+    return _edge_kif(record, "src") or record.get("output_kif") or record.get("oq_kif")
+
+
+def _input_qint(record: dict[str, Any]):
+    return _edge_qint(record, "dst")
+
+
+def _input_kif(record: dict[str, Any]):
+    return _edge_kif(record, "dst")
+
+
+def _stamp_attention_precision(records_by_name: dict[str, dict[str, Any]]) -> None:
+    by_parent_role = {
+        (record.get("compound_parent"), record.get("attention_role")): record
+        for record in records_by_name.values()
+        if record.get("compound_parent") is not None
+    }
+    parents = {parent for parent, _ in by_parent_role}
+    for parent in parents:
+        query = by_parent_role.get((parent, "query"))
+        key = by_parent_role.get((parent, "key"))
+        value = by_parent_role.get((parent, "value"))
+        qk = by_parent_role.get((parent, "qk"))
+        softmax = by_parent_role.get((parent, "softmax"))
+        av = by_parent_role.get((parent, "av"))
+        output = by_parent_role.get((parent, "attention_output"))
+        if all(x is not None for x in (query, key, qk)):
+            qk["input_qints"] = [_output_qint(key), _output_qint(query)]
+            qk["input_kifs"] = [_output_kif(key), _output_kif(query)]
+            qk["iq_qint"] = next((q for q in qk["input_qints"] if q is not None), None)
+            qk["iq_kif"] = next((k for k in qk["input_kifs"] if k is not None), None)
+            qk["iq_bw"] = _hgq.bitwidth_from_kif(qk["iq_kif"])
+        if qk is not None and softmax is not None:
+            qk["output_qint"] = _input_qint(softmax)
+            qk["output_kif"] = _input_kif(softmax)
+            qk["oq_qint"] = qk["output_qint"]
+            qk["oq_kif"] = qk["output_kif"]
+            qk["oq_bw"] = _hgq.bitwidth_from_kif(qk["output_kif"])
+            softmax["input_qints"] = [qk["output_qint"]]
+            softmax["input_kifs"] = [qk["output_kif"]]
+        if softmax is not None:
+            softmax["output_qint"] = _output_qint(softmax)
+            softmax["output_kif"] = _output_kif(softmax)
+        if all(x is not None for x in (softmax, value, av)):
+            av["input_qints"] = [_output_qint(softmax), _output_qint(value)]
+            av["input_kifs"] = [_output_kif(softmax), _output_kif(value)]
+            av["iq_qint"] = next((q for q in av["input_qints"] if q is not None), None)
+            av["iq_kif"] = next((k for k in av["input_kifs"] if k is not None), None)
+            av["iq_bw"] = _hgq.bitwidth_from_kif(av["iq_kif"])
+        if av is not None and output is not None:
+            av["output_qint"] = _input_qint(output)
+            av["output_kif"] = _input_kif(output)
+            av["oq_qint"] = av["output_qint"]
+            av["oq_kif"] = av["output_kif"]
+            av["oq_bw"] = _hgq.bitwidth_from_kif(av["output_kif"])
+
+
+def _edge_shape(src_rec: dict[str, Any]) -> tuple | None:
+    return tuple(src_rec["out_shapes"][0]) if src_rec.get("out_shapes") else None
+
+
+def _add_edge_with_metadata(
+    g: HGraph,
+    rec_by_name: dict[str, dict[str, Any]],
+    name2vx: dict[str, int],
+    src_name: str,
+    dst_name: str,
+    *,
+    consume_mode: str = "stepwise",
+) -> None:
+    if src_name not in name2vx or dst_name not in name2vx:
+        return
+    src_vx = name2vx[src_name]
+    dst_vx = name2vx[dst_name]
+    if src_vx == dst_vx:
+        return
+
+    created = g.add_edge(src_vx, dst_vx)
+    if not created:
+        return
+
+    src_rec = rec_by_name[src_name]
+    dst_rec = rec_by_name[dst_name]
+    edge = created[0]
+    shape = _edge_shape(src_rec)
+    src_kif = _edge_kif(src_rec, "src")
+    dst_kif = _edge_kif(dst_rec, "dst")
+    src_qint = _edge_qint(src_rec, "src")
+    dst_qint = _edge_qint(dst_rec, "dst")
+    bw_src = _hgq.bitwidth_from_kif(src_kif)
+    bw_dst = _hgq.bitwidth_from_kif(dst_kif)
+    element_bw = bw_src if bw_src is not None else bw_dst
+    tensor_width = None
+    if shape is not None and element_bw is not None:
+        nbv = _non_batch_volume(shape)
+        if nbv is not None:
+            tensor_width = float(nbv * element_bw)
+
+    boundary = False
+    if src_kif is not None and dst_kif is not None:
+        boundary = repr(src_kif) != repr(dst_kif)
+
+    g.pmap[edge].update(
+        {
+            "tensor_shape": shape,
+            "src_qint": src_qint,
+            "src_kif": src_kif,
+            "src_bitwidth_bits": bw_src,
+            "dst_qint": dst_qint,
+            "dst_kif": dst_kif,
+            "dst_bitwidth_bits": bw_dst,
+            "element_bitwidth_bits": element_bw,
+            "element_kif": src_kif if src_kif is not None else dst_kif,
+            "element_qint": src_qint if src_qint is not None else dst_qint,
+            "tensor_width_bits": tensor_width,
+            "volume_bits_exact": tensor_width,
+            "has_quantization_boundary": boundary,
+            "producer_quantizer": src_rec.get("oq") or src_rec.get("aq"),
+            "consumer_quantizer": dst_rec.get("iq"),
+            "consume_mode": consume_mode,
+            "needs_cast": boundary,
+            "cast_mode": "requantize" if boundary else None,
+            # Legacy aliases.
+            "bitwidth_src": bw_src,
+            "bitwidth_dst": bw_dst,
+            "volume_bits": tensor_width,
+        }
+    )
+
+
 def build_nn_ir(
     model,
     name: str | None = None,
@@ -322,16 +575,49 @@ def build_nn_ir(
     except Exception:
         g.pmap["n_classes"] = None
 
-    records = [
-        _extract_record(
-            layer,
-            i,
-            include_values=include_values,
-            include_histograms=include_histograms,
-            value_storage=value_storage,
+    records: list[dict[str, Any]] = []
+    synthetic_edges: list[AttentionEdgeSpec] = []
+    output_alias: dict[str, str] = {}
+    synthetic_idx = 0
+
+    for i, layer in enumerate(model.layers):
+        if is_attention_layer(layer):
+            lowering = lower_attention_layer(
+                layer,
+                _layer_inbound(layer),
+                _layer_shapes(layer)[0],
+                _layer_shapes(layer)[1],
+            )
+            output_alias[layer.name] = lowering.output_name
+            synthetic_edges.extend(lowering.edges)
+            for spec in lowering.records:
+                layer_idx = i * 100 + synthetic_idx
+                synthetic_idx += 1
+                if spec.source_layer is not None and spec.op_kind == "einsum_dense":
+                    record = _extract_record(
+                        spec.source_layer,
+                        layer_idx,
+                        include_values=include_values,
+                        include_histograms=include_histograms,
+                        value_storage=value_storage,
+                    )
+                    record = _override_record_from_attention_spec(record, spec, layer.name)
+                else:
+                    record = _nonparam_attention_record(spec, layer_idx, layer.name)
+                records.append(record)
+            continue
+
+        records.append(
+            _extract_record(
+                layer,
+                i,
+                include_values=include_values,
+                include_histograms=include_histograms,
+                value_storage=value_storage,
+            )
         )
-        for i, layer in enumerate(model.layers)
-    ]
+
+    _stamp_attention_precision({record["layer_name"]: record for record in records})
     rec_by_name = {record["layer_name"]: record for record in records}
 
     name2vx: dict[str, int] = {}
@@ -340,66 +626,28 @@ def build_nn_ir(
         name2vx[record["layer_name"]] = vx
         g.pmap[vx].update(record)
 
+    for edge_spec in synthetic_edges:
+        _add_edge_with_metadata(
+            g,
+            rec_by_name,
+            name2vx,
+            output_alias.get(edge_spec.source, edge_spec.source),
+            output_alias.get(edge_spec.destination, edge_spec.destination),
+            consume_mode=edge_spec.consume_mode,
+        )
+
     for layer in model.layers:
+        if is_attention_layer(layer):
+            continue
         dst_name = layer.name
-        dst_rec = rec_by_name[dst_name]
-        dst_vx = name2vx[dst_name]
 
         for src_name in _layer_inbound(layer):
-            if src_name not in name2vx:
-                continue
-            src_vx = name2vx[src_name]
-            if src_vx == dst_vx:
-                continue
-
-            created = g.add_edge(src_vx, dst_vx)
-            if not created:
-                continue
-
-            src_rec = rec_by_name[src_name]
-            edge = created[0]
-            shape = tuple(src_rec["out_shapes"][0]) if src_rec["out_shapes"] else None
-            src_kif = _edge_kif(src_rec, "src")
-            dst_kif = _edge_kif(dst_rec, "dst")
-            src_qint = _edge_qint(src_rec, "src")
-            dst_qint = _edge_qint(dst_rec, "dst")
-            bw_src = _hgq.bitwidth_from_kif(src_kif)
-            bw_dst = _hgq.bitwidth_from_kif(dst_kif)
-            element_bw = bw_src if bw_src is not None else bw_dst
-            tensor_width = None
-            if shape is not None and element_bw is not None:
-                nbv = _non_batch_volume(shape)
-                if nbv is not None:
-                    tensor_width = float(nbv * element_bw)
-
-            boundary = False
-            if src_kif is not None and dst_kif is not None:
-                boundary = repr(src_kif) != repr(dst_kif)
-
-            g.pmap[edge].update(
-                {
-                    "tensor_shape": shape,
-                    "src_qint": src_qint,
-                    "src_kif": src_kif,
-                    "src_bitwidth_bits": bw_src,
-                    "dst_qint": dst_qint,
-                    "dst_kif": dst_kif,
-                    "dst_bitwidth_bits": bw_dst,
-                    "element_bitwidth_bits": element_bw,
-                    "element_kif": src_kif if src_kif is not None else dst_kif,
-                    "element_qint": src_qint if src_qint is not None else dst_qint,
-                    "tensor_width_bits": tensor_width,
-                    "volume_bits_exact": tensor_width,
-                    "has_quantization_boundary": boundary,
-                    "producer_quantizer": src_rec.get("oq") or src_rec.get("aq"),
-                    "consumer_quantizer": dst_rec.get("iq"),
-                    "needs_cast": boundary,
-                    "cast_mode": "requantize" if boundary else None,
-                    # Legacy aliases.
-                    "bitwidth_src": bw_src,
-                    "bitwidth_dst": bw_dst,
-                    "volume_bits": tensor_width,
-                }
+            _add_edge_with_metadata(
+                g,
+                rec_by_name,
+                name2vx,
+                output_alias.get(src_name, src_name),
+                output_alias.get(dst_name, dst_name),
             )
 
     if validate:

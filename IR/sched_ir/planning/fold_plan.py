@@ -30,6 +30,8 @@ class _UnionFind:
 
 
 def _shared_fold_axis(source: dict, destination: dict, shape) -> int | None:
+    if not source.get("foldable", True) or not destination.get("foldable", True):
+        return None
     if shape is None:
         return None
     common_axes = set(source.get("fold_axes") or ()) & set(
