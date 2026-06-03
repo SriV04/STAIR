@@ -16,6 +16,8 @@ class SymbolicTokenValue:
     qints: list[Any]
     shape: tuple[int, ...] | None
     ready_cycle: int | None
+    fold_group: int | None = None
+    task_kind: str = "compute"
 
 
 @dataclass(frozen=True)
@@ -48,13 +50,24 @@ class CorrectnessFailure:
 
 
 @dataclass(frozen=True)
+class FoldGroupSemanticFailure:
+    group_id: int
+    source_nodes: tuple[int, ...]
+    reason: str
+    expected: Any
+    actual: Any
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class CorrectnessReport:
     reference_qints: list[Any]
     scheduled_qints: list[Any]
     failures: list[CorrectnessFailure]
     checked_output_count: int
     metadata: dict[str, Any] = field(default_factory=dict)
+    fold_group_failures: list[FoldGroupSemanticFailure] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
-        return not self.failures
+        return not self.failures and not self.fold_group_failures

@@ -24,6 +24,7 @@ class FakeGraph:
             "parallelism_N": 8,
             "lanes_P": 4,
             "fold_axes": [0],
+            "fold_group": 2,
         }
     }
 
@@ -102,7 +103,53 @@ def test_build_scheduled_trace_slices_folded_outputs_by_temporal_step():
     )
     assert trace.token_values["0:out:t1"].qints == ["q4", "q5", "q6", "q7"]
     assert trace.token_values["0:out:t1"].ready_cycle == 3
+    assert trace.token_values["0:out:t1"].fold_group == 2
     assert trace.output_qints == ["q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7"]
+
+
+def test_build_scheduled_trace_uses_logical_unfolded_shape_for_slices():
+    graph = FakeGraph()
+    graph.pmap = {
+        0: {
+            **FakeGraph.pmap[0],
+            "op_params": {"output_shapes": (None, 8, 4)},
+            "evaluated_output_shapes": [(4, 4)],
+            "evaluated_output_qints": [["q0", "q1", "q2", "q3"]],
+            "fold_axes": [1],
+        }
+    }
+    evaluation = SimpleNamespace(
+        graph=graph,
+        runtime_artifacts={"trace:0": SimpleNamespace(symbolic_outputs=["out"])},
+    )
+    task_graph = TaskGraph(
+        tasks={
+            "node:0:t1": Task(
+                "node:0:t1",
+                0,
+                1,
+                "node:0",
+                ["input:0:t1"],
+                ["0:out:t1"],
+                2,
+                1,
+            )
+        },
+        resources={"node:0": ResourceInstance("node:0", 0, {}, 2, 1)},
+        initial_tokens={"input:0:t1"},
+    )
+    schedule = TaskSchedule(
+        tasks={"node:0:t1": ScheduledTask(task_graph.tasks["node:0:t1"], 0, 2)},
+        token_ready={"0:out:t1": 2},
+        resource_next_issue={"node:0": 1},
+    )
+
+    trace = build_scheduled_trace(evaluation, task_graph, schedule)
+
+    assert trace.token_values["0:out:t1"].logical_slice == (
+        slice(4, 8),
+        slice(None),
+    )
 
 
 def test_build_scheduled_trace_pads_unused_lanes_with_neutral_qints():
@@ -143,7 +190,10 @@ def test_build_scheduled_trace_pads_unused_lanes_with_neutral_qints():
     trace = build_scheduled_trace(evaluation, task_graph, schedule)
 
     assert trace.token_values["0:out:t1"].qints[:2] == ["q4", "q5"]
-    assert [getattr(qint, "neutral", False) for qint in trace.token_values["0:out:t1"].qints[2:]] == [True, True]
+    assert [
+        getattr(qint, "neutral", False)
+        for qint in trace.token_values["0:out:t1"].qints[2:]
+    ] == [True, True]
     assert trace.output_qints == ["q4", "q5"]
 
 
@@ -221,6 +271,7 @@ def test_temporal_accumulator_task_combines_symbolic_values_and_qints():
 
     trace = build_scheduled_trace(evaluation, task_graph, schedule)
 
+    assert trace.token_values["0:partial:t1"].logical_slice is None
     assert trace.output_tokens == ["0:out"]
     assert trace.token_values["0:out"].value.label == "(s0+s1)"
     assert trace.token_values["0:out"].qints == ["(q0+q1)"]

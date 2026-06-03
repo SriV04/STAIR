@@ -1,6 +1,7 @@
 from IR.sched_ir.correctness.records import (
     CorrectnessFailure,
     CorrectnessReport,
+    FoldGroupSemanticFailure,
     SymbolicTokenValue,
 )
 
@@ -53,3 +54,23 @@ def test_correctness_report_passed_property_tracks_failures():
     assert passed.passed is True
     assert failed.passed is False
     assert failed.failures[0].provenance["task_id"] == "node:3:t1"
+
+
+def test_correctness_report_fails_on_fold_group_semantic_failures():
+    report = CorrectnessReport(
+        reference_qints=[],
+        scheduled_qints=[],
+        failures=[],
+        checked_output_count=0,
+        fold_group_failures=[
+            FoldGroupSemanticFailure(
+                group_id=2,
+                source_nodes=(3,),
+                reason="missing temporal step 1",
+                expected=(0, 1),
+                actual=(0,),
+            )
+        ],
+    )
+
+    assert report.passed is False

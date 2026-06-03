@@ -33,13 +33,59 @@ def _normalise_axis(axis: int, shape: tuple[int, ...]) -> int:
     return 0
 
 
+def _normalise_declared_fold_axis(axis: int, shape: tuple[int, ...]) -> int:
+    if axis > 0 and 0 <= axis - 1 < len(shape):
+        return axis - 1
+    return _normalise_axis(axis, shape)
+
+
+def _strip_batch_shape(shape) -> tuple[int, ...] | None:
+    if shape is None:
+        return None
+    try:
+        dims = tuple(None if dim is None else int(dim) for dim in tuple(shape))
+    except TypeError:
+        return None
+    if dims and dims[0] is None:
+        dims = dims[1:]
+    if any(dim is None for dim in dims):
+        return None
+    return dims
+
+
+def _shape_from_output_shapes(output_shapes):
+    if not output_shapes:
+        return None
+    if all(isinstance(dim, (int, np.integer, type(None))) for dim in output_shapes):
+        return output_shapes
+    return output_shapes[0]
+
+
+def _logical_output_shape(node: dict) -> tuple[int, ...] | None:
+    params = node.get("op_params") or {}
+    for shape in (
+        params.get("output_shape"),
+        _shape_from_output_shapes(params.get("output_shapes")),
+        (node.get("evaluated_output_shapes") or [None])[0],
+    ):
+        stripped = _strip_batch_shape(shape)
+        if stripped:
+            return stripped
+    return None
+
+
 def _slice_for_step(node: dict, step: int) -> tuple[Any, ...] | None:
     steps = max(int(node.get("temporal_steps_T") or 1), 1)
-    shape = (node.get("evaluated_output_shapes") or [None])[0]
+    if (
+        node.get("op") == "reduce"
+        and node.get("reduce_mode") in {"hybrid", "temporal_accumulate"}
+    ):
+        return None
+    shape = _logical_output_shape(node)
     if steps == 1 or shape is None:
         return None
     axes = node.get("fold_axes") or []
-    axis = _normalise_axis(int(axes[0]), tuple(shape)) if axes else 0
+    axis = _normalise_declared_fold_axis(int(axes[0]), shape) if axes else 0
     lanes = max(int(node.get("lanes_P") or 1), 1)
     start = step * lanes
     stop = min(start + lanes, int(shape[axis]))
@@ -164,7 +210,11 @@ def build_scheduled_trace(evaluation, task_graph, schedule) -> ScheduledTrace:
                     for qint in token.qints
                     if not getattr(qint, "neutral", False)
                 ]
-            shape = ordered[0].shape if ordered else (node.get("evaluated_output_shapes") or [None])[0]
+            shape = (
+                ordered[0].shape
+                if ordered
+                else (node.get("evaluated_output_shapes") or [None])[0]
+            )
             for token_id in task.output_tokens:
                 produced_tokens.append(token_id)
                 token_values[token_id] = SymbolicTokenValue(
@@ -176,6 +226,8 @@ def build_scheduled_trace(evaluation, task_graph, schedule) -> ScheduledTrace:
                     qints=qints,
                     shape=shape,
                     ready_cycle=scheduled.end,
+                    fold_group=node.get("fold_group"),
+                    task_kind=task.task_kind,
                 )
             continue
 
@@ -196,6 +248,8 @@ def build_scheduled_trace(evaluation, task_graph, schedule) -> ScheduledTrace:
                 qints=qints,
                 shape=shape,
                 ready_cycle=scheduled.end,
+                fold_group=node.get("fold_group"),
+                task_kind=task.task_kind,
             )
 
     output_tokens = _terminal_tokens(task_graph, produced_tokens)
