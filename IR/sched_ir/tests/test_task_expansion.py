@@ -43,4 +43,12 @@ def test_hybrid_reduce_creates_temporal_accumulator_task(
     assert accumulator.resource_id == "node:1:acc"
     assert accumulator.input_tokens == ["1:partial:t0", "1:partial:t1"]
     assert accumulator.output_tokens == ["1:out"]
-    assert task_graph.resources["node:1:acc"].cost["cost_mode"] == "synthetic_temporal_accumulator"
+    acc_cost = task_graph.resources["node:1:acc"].cost
+    assert acc_cost["cost_mode"] in {
+        "synthetic_temporal_accumulator_width_proxy",
+        "synthetic_temporal_accumulator_missing_metadata",
+    }
+    assert acc_cost["lut"] > 0
+    assert acc_cost["ff"] > 0
+    assert acc_cost["latency_cycles"] == 1
+    assert acc_cost["ii"] == 1

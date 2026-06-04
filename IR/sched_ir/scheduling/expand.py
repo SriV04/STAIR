@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .temporal_accumulator_cost import estimate_temporal_accumulator_cost
 from .task_ir import ResourceInstance, Task, TaskGraph
 
 
@@ -103,15 +104,7 @@ def expand_tasks(evaluated_graph) -> TaskGraph:
 
         if needs_accumulator:
             accumulator_resource_id = f"{resource_id}:acc"
-            accumulator_cost = {
-                "lut": 0,
-                "ff": 0,
-                "dsp": 0,
-                "bram": 0,
-                "latency_cycles": 1,
-                "ii": 1,
-                "cost_mode": "synthetic_temporal_accumulator",
-            }
+            accumulator_cost = estimate_temporal_accumulator_cost(node)
             resources[accumulator_resource_id] = ResourceInstance(
                 accumulator_resource_id,
                 node_id,
