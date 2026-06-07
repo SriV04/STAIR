@@ -39,3 +39,13 @@ def test_metrics_count_hardware_area_once_and_work_per_task_invocation():
     assert metrics["latency_cycles"] == 3
     assert metrics["sample_ii_cycles"] == 2
     assert metrics["throughput_samples_per_sec"] == 150e6
+
+
+def test_latency_cycles_spans_t0_to_latest_scheduled_task_end():
+    task_graph = _two_step_task_graph()
+    schedule = schedule_tasks(task_graph)
+    metrics = schedule_metrics(schedule, task_graph, fclk_hz=300e6)
+
+    assert min(item.start for item in schedule.tasks.values()) == 0
+    assert max(item.end for item in schedule.tasks.values()) == 3
+    assert metrics["latency_cycles"] == 3

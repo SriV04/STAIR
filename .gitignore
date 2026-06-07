@@ -15,3 +15,9 @@ IR/evaluation_plots/
 
 docs/superpowers/
 third_party/
+
+jedi-linear-8-3/
+notebooks/*.png
+notebooks/deepnet_figures/*.png
+IR/jedi_luts_vs_particles_by_feature.png
+.DS_Store
