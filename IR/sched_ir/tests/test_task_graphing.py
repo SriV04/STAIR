@@ -2,6 +2,7 @@ from IR.sched_ir.graphing.styling import SCHED_COLORS, sched_vx_label
 from IR.sched_ir.graphing.tasks import task_schedule_to_hgraph
 from IR.sched_ir.scheduling.expand import expand_tasks
 from IR.sched_ir.scheduling.scheduler import schedule_tasks
+from IR.sched_ir.scheduling.sync_analysis import analyse_sync_points
 
 
 class StyledFakeHGraph:
@@ -122,3 +123,49 @@ def test_task_schedule_view_styles_temporal_accumulator_as_distinct_vertex(
     assert graph.estyle["color"](graph, incoming_edges[0]) == "#8E24AA"
     assert graph.estyle["style"](graph, incoming_edges[0]) == "dashed"
     assert graph.estyle["label"](graph, incoming_edges[0]).startswith("acc ")
+
+
+def test_task_schedule_view_annotates_sync_edge_lifetimes(
+    monkeypatch,
+    evaluated_dense_reduce_graph,
+):
+    monkeypatch.setattr(
+        "IR.sched_ir.graphing.tasks.HGraph",
+        StyledFakeHGraph,
+    )
+    task_graph = expand_tasks(evaluated_dense_reduce_graph)
+    schedule = schedule_tasks(task_graph)
+    sync_report = analyse_sync_points(schedule)
+
+    graph = task_schedule_to_hgraph(
+        task_graph,
+        schedule,
+        source_graph=evaluated_dense_reduce_graph,
+        sync_report=sync_report,
+    )
+    accumulator_vertex = next(
+        vertex
+        for vertex in graph.vertices
+        if graph.pmap[vertex]["task_id"] == "node:1:acc"
+    )
+    incoming_edges = [
+        edge for edge in graph.edges if edge[1] == accumulator_vertex
+    ]
+    waited_edge = next(
+        edge
+        for edge in incoming_edges
+        if graph.pmap[edge]["input_buffer_wait_cycles"] > 0
+    )
+    label = graph.estyle["label"](graph, waited_edge)
+    vertex_label = graph.vstyle["label"](graph, accumulator_vertex)
+
+    assert graph.pmap[waited_edge]["is_sync_edge"] is True
+    assert graph.pmap[waited_edge]["input_arrival_cycle"] == 4
+    assert graph.pmap[waited_edge]["consumer_start_cycle"] == 5
+    assert graph.pmap[waited_edge]["input_buffer_wait_cycles"] == 1
+    assert graph.pmap[waited_edge]["sync_wait_cycles"] == 1
+    assert graph.pmap[waited_edge]["is_max_wait_edge"] is True
+    assert "ready=4" in label
+    assert "start=5" in label
+    assert "wait=1" in label
+    assert "sync acc: inputs=2 max_wait=1" in vertex_label
