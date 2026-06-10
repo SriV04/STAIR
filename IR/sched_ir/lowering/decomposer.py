@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from heterograph import HGraph
+from ..analysis.einsum_axes import fold_analysis_from_params
 from ..schema import einit_sched, ginit_sched, vinit_sched
 from ..types.op_params import (
     default_activation_params,
@@ -179,9 +180,8 @@ def _infer_broadcast(in_shapes, out_shape) -> dict[int, list[int]] | None:
             result[port] = axes
     return result or None
 
-#TODO: fold axis is dependent on the einsum equation and shapes of inputs 
 def _guess_fold_axes(in_shape) -> list[int] | None:
-    """Cheap fold-axis detection — returns tensor dimension indices.
+    """Shape fallback for non-contraction ops with no axis equation.
 
     Any concrete dim > 1 that sits *after* the batch dim (index 0) is a
     candidate fold axis: by definition the op replicates the same
@@ -202,6 +202,45 @@ def _guess_fold_axes(in_shape) -> list[int] | None:
         return None
     axes = [i for i, d in enumerate(dims[1:-1], start=1) if d not in (None, 1)]
     return axes or None
+
+
+def _fold_axes_from_reduction(params: dict) -> list[int] | None:
+    axes = params.get("axes")
+    in_shape = params.get("input_shape") or params.get("in_shape")
+    if in_shape is None or not axes:
+        return None
+    result = []
+    rank = len(in_shape)
+    for axis in axes:
+        axis = int(axis)
+        normalised = axis + rank if axis < 0 else axis
+        if 0 <= normalised < rank and in_shape[normalised] not in (None, 1):
+            result.append(normalised)
+    return result or None
+
+
+def _fold_metadata_for_node(prim: str, params: dict, p: dict) -> dict:
+    if prim == "dense":
+        analysis = fold_analysis_from_params(params, layer_name=p.get("layer_name"))
+        return {
+            "einsum_spec": analysis["einsum_spec"],
+            "fold_axes": analysis["fold_axes"],
+            "fold_axis_names": analysis["fold_axis_names"],
+            "local_equations": analysis["local_equations"],
+        }
+    if prim == "reduce":
+        return {
+            "einsum_spec": None,
+            "fold_axes": _fold_axes_from_reduction(params),
+            "fold_axis_names": None,
+            "local_equations": None,
+        }
+    return {
+        "einsum_spec": None,
+        "fold_axes": _guess_fold_axes(_first(p.get("in_shapes"))),
+        "fold_axis_names": None,
+        "local_equations": None,
+    }
 
 
 def _out_bw_add(in_bws) -> float | None:
@@ -694,7 +733,16 @@ def decompose_nn_to_sched(nn_g: HGraph, name: str | None = None) -> HGraph:
         sp["foldable"]      = bool(p.get("foldable", prim not in {"einsum", "softmax", "transport"}))
         sp["cost_mode"]     = p.get("cost_mode")
         sp["keras_layer"]   = p.get("keras_layer")
-        sp["fold_axes"]     = _guess_fold_axes(_first(p.get("in_shapes"))) if sp["foldable"] else None
+        fold_metadata = _fold_metadata_for_node(prim, params, p) if sp["foldable"] else {
+            "einsum_spec": None,
+            "fold_axes": None,
+            "fold_axis_names": None,
+            "local_equations": None,
+        }
+        sp["fold_axes"] = fold_metadata["fold_axes"]
+        sp["fold_axis_names"] = fold_metadata["fold_axis_names"]
+        sp["einsum_spec"] = fold_metadata["einsum_spec"]
+        sp["local_equations"] = fold_metadata["local_equations"]
         _apply_node_precision_from_params(sp, params, prim)
 
         # Reduction-specific default: spatial tree until the scheduler

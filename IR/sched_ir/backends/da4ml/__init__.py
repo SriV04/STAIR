@@ -8,7 +8,14 @@ from .records import (
     PrimitiveEvaluation,
     SymbolicTensorState,
 )
-from .plugin import DA4MLBackend
+
+
+def __getattr__(name):
+    if name == "DA4MLBackend":
+        from .plugin import DA4MLBackend
+
+        return DA4MLBackend
+    raise AttributeError(name)
 
 __all__ = [
     "DA4MLNodeArtifact",

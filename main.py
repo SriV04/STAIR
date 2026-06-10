@@ -310,11 +310,13 @@ def main(argv=None):
     print(f"FOLDED DESIGN EVALUATION PIPELINE")
     
     # Model path from api.py
-    model_path = Path("official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras")
+    # model_path = Path("official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras")
     # model_path = Path("official_models/deepset/epoch=890-acc=69.51%-val_acc=70.03%-EBOPs=146212.keras")
     # model_path = Path("official_models/deepset/epoch=490-acc=68.93%-val_acc=69.57%-EBOPs=80935.keras")
     # linformer
     # model_path = Path("official_models/linformers/lin8part.keras")
+    # model_path = Path("official_models/linformers/lin16part.keras")
+    model_path = Path("official_models/linformers/lin32part.keras")
 
     # 64 particle model 
     # model_path = Path("official_models/3-feature-perminv/jet_classifier_large_64/ckpts/epoch=1294-acc=81.65%-val_acc=81.64%-EBOPs=226791.keras")
@@ -327,7 +329,7 @@ def main(argv=None):
         nn_graph = build_nn_ir_graph(model)
         
         # Step 3: Evaluate folded design
-        design = evaluate_folded_design(nn_graph, model, fold_factor=1)
+        design = evaluate_folded_design(nn_graph, model, fold_factor=2)
 
         apply_nn_style(nn_graph)
         apply_sched_style(design.sched_graph)

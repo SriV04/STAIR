@@ -6,12 +6,10 @@ import math
 from typing import Any
 
 import numpy as np
-import keras
-from da4ml.converter import trace_model
-from da4ml.trace import comb_trace
 
+from .attention_cost_oracle import estimate_attention_cost
 from .records import PipelineEvalConfig, PrimitiveEvaluation, SymbolicTensorState
-from .folded_layers import build_folded_entry_layer_model
+from .folded_layers import build_folded_layer_model
 
 
 def _as_list(value):
@@ -85,9 +83,101 @@ def _qintervals_from_summary(qint, shape) -> list:
     maxs = np.broadcast_to(maxs, shape).reshape(-1) if maxs.size != count else maxs.reshape(-1)
     steps = np.broadcast_to(steps, shape).reshape(-1) if steps.size != count else steps.reshape(-1)
     return [
-        QInterval(float(min_v), float(max_v), float(step_v))
+        QInterval(*_normalise_qinterval_values(float(min_v), float(max_v), float(step_v)))
         for min_v, max_v, step_v in zip(mins, maxs, steps, strict=True)
     ]
+
+
+def _normalise_qinterval_values(min_v: float, max_v: float, step_v: float) -> tuple[float, float, float]:
+    step_v = abs(step_v) if step_v else 1.0
+    if max_v >= min_v:
+        return min_v, max_v, step_v
+    if min_v == 0 and max_v < 0:
+        return 0.0, 0.0, step_v
+    return max_v, min_v, step_v
+
+
+def _qinterval_like(template, min_v: float, max_v: float, step_v: float):
+    try:
+        return template.__class__(min_v, max_v, step_v)
+    except Exception:
+        from da4ml.types import QInterval
+
+        return QInterval(min_v, max_v, step_v)
+
+
+def _merge_qintervals(qints) -> Any:
+    qints = list(qints)
+    if not qints:
+        raise ValueError("Cannot merge an empty qint block")
+    mins = [float(getattr(qint, "min")) for qint in qints]
+    maxs = [float(getattr(qint, "max")) for qint in qints]
+    steps = [abs(float(getattr(qint, "step"))) for qint in qints]
+    return _qinterval_like(
+        qints[0],
+        min(mins),
+        max(maxs),
+        min(step for step in steps if step > 0) if any(step > 0 for step in steps) else 1.0,
+    )
+
+
+def _adapt_qints_for_shape(qints, source_shape, target_shape) -> list:
+    source_shape = tuple(int(dim) for dim in source_shape)
+    target_shape = tuple(int(dim) for dim in target_shape)
+    flat_qints = list(qints)
+    if source_shape == target_shape:
+        return flat_qints
+    if _numel(source_shape) != len(flat_qints):
+        raise ValueError(
+            f"Expected {source_shape} to contain {len(flat_qints)} qints, "
+            f"got {_numel(source_shape)} elements"
+        )
+    if len(source_shape) == len(target_shape) and source_shape[1:] == target_shape[1:]:
+        source_n = source_shape[0]
+        target_n = target_shape[0]
+        source_array = np.empty(source_shape, dtype=object)
+        source_array.reshape(-1)[:] = flat_qints
+        if target_n > source_n and target_n % source_n == 0:
+            return np.repeat(source_array, target_n // source_n, axis=0).reshape(-1).tolist()
+        if source_n > target_n and source_n % target_n == 0:
+            fold_factor = source_n // target_n
+            grouped = source_array.reshape(target_n, fold_factor, *source_shape[1:])
+            folded = np.empty(target_shape, dtype=object)
+            for index in np.ndindex(target_shape):
+                folded[index] = _merge_qintervals(grouped[(index[0], slice(None), *index[1:])])
+            return folded.reshape(-1).tolist()
+    raise ValueError(f"Cannot adapt qints from shape {source_shape} to {target_shape}")
+
+
+def _symbolic_input_from_state(state: SymbolicTensorState, target_shape, hwconf):
+    qints = _adapt_qints_for_shape(state.qints, state.shape, target_shape)
+    return qints_to_symbolic_input(
+        qints,
+        target_shape,
+        hwconf,
+        latency=state.latency,
+    )
+
+
+def _layer_input_shapes(layer, input_states) -> list[tuple[int, ...]]:
+    try:
+        shapes = [_tensor_shape(tensor) for tensor in _as_list(layer.input)]
+    except Exception:
+        shapes = []
+    if len(shapes) != len(input_states):
+        return [state.shape for state in input_states]
+    return shapes
+
+
+def _op_param_input_shapes(node_pmap, count: int) -> list[tuple[int, ...]]:
+    params = (node_pmap or {}).get("op_params") or {}
+    raw_shapes = params.get("input_shapes") or params.get("in_shapes")
+    if raw_shapes is None and params.get("input_shape") is not None:
+        raw_shapes = [params.get("input_shape")]
+    if raw_shapes is None:
+        return []
+    shapes = [_strip_batch_shape(shape) for shape in _as_list(raw_shapes)]
+    return shapes if len(shapes) == count else []
 
 
 def reconcile_output_shapes(
@@ -231,6 +321,16 @@ def synthetic_primitive_from_op(
     if node_pmap.get("op") == "transport" and input_states:
         if not output_qints and len(input_states[0].qints) == count:
             output_qints = list(input_states[0].qints)
+        if not output_qints:
+            input_shapes = _op_param_input_shapes(node_pmap, 1)
+            if input_shapes:
+                adapted_qints = _adapt_qints_for_shape(
+                    input_states[0].qints,
+                    input_states[0].shape,
+                    input_shapes[0],
+                )
+                if len(adapted_qints) == count:
+                    output_qints = adapted_qints
         if not output_kifs and len(input_states[0].kifs) == count:
             output_kifs = list(input_states[0].kifs)
     default_cost = {
@@ -267,6 +367,7 @@ def synthetic_primitive_from_op(
 
 def trace_layer(
     *,
+    node_pmap=None,
     layer,
     input_states: list[SymbolicTensorState],
     config: dict | None,
@@ -276,16 +377,24 @@ def trace_layer(
     config = config or {}
     hwconf = config.get("hwconf")
     verbose = bool(config.get("verbose", False))
+    import keras
+    from da4ml.converter import trace_model
+    from da4ml.trace import comb_trace
+
     if input_states:
+        expected_shapes = _op_param_input_shapes(node_pmap, len(input_states)) or _layer_input_shapes(
+            layer,
+            input_states,
+        )
         keras_inputs = [
-            keras.Input(shape=state.shape, name=f"{layer.name}_input_{index}")
-            for index, state in enumerate(input_states)
+            keras.Input(shape=shape, name=f"{layer.name}_input_{index}")
+            for index, shape in enumerate(expected_shapes)
         ]
         layer_arg = keras_inputs[0] if len(keras_inputs) == 1 else keras_inputs
         model = keras.Model(keras_inputs, layer(layer_arg), name=f"tmp_{layer.name}")
         symbolic_inputs = [
-            qints_to_symbolic_input(state.qints, state.shape, hwconf, latency=state.latency)
-            for state in input_states
+            _symbolic_input_from_state(state, shape, hwconf)
+            for state, shape in zip(input_states, expected_shapes, strict=True)
         ]
         trace_inputs = symbolic_inputs[0] if len(symbolic_inputs) == 1 else tuple(symbolic_inputs)
         inp, out = trace_model(model, inputs=trace_inputs, verbose=verbose)
@@ -312,21 +421,44 @@ def trace_layer(
     )
 
 
-def trace_folded_entry_layer(*, node_pmap, layer, config) -> PrimitiveEvaluation:
-    """Trace rebuilt folded entry hardware before sequential precision handoff."""
+def trace_folded_layer(
+    *,
+    node_pmap,
+    layer,
+    input_states: list[SymbolicTensorState],
+    config,
+) -> PrimitiveEvaluation:
+    """Trace rebuilt folded hardware before sequential precision handoff."""
+
+    config = config or {}
+    from da4ml.converter import trace_model
+    from da4ml.trace import comb_trace
 
     factor = int(node_pmap.get("temporal_steps_T") or 1)
-    folded_model, weight_copy_log = build_folded_entry_layer_model(
+    folded_model, weight_copy_log = build_folded_layer_model(
         layer,
         fold_factor=factor,
     )
-    inp, out = trace_model(folded_model, verbose=bool((config or {}).get("verbose", False)))
+    if input_states:
+        expected_shapes = [_tensor_shape(tensor) for tensor in _as_list(folded_model.input)]
+        symbolic_inputs = [
+            _symbolic_input_from_state(state, shape, config.get("hwconf"))
+            for state, shape in zip(input_states, expected_shapes, strict=True)
+        ]
+        trace_inputs = symbolic_inputs[0] if len(symbolic_inputs) == 1 else tuple(symbolic_inputs)
+        inp, out = trace_model(
+            folded_model,
+            inputs=trace_inputs,
+            verbose=bool(config.get("verbose", False)),
+        )
+    else:
+        inp, out = trace_model(folded_model, verbose=bool(config.get("verbose", False)))
+        symbolic_inputs = _as_list(inp)
     comb = comb_trace(inp, out)
-    symbolic_inputs = _as_list(inp)
     symbolic_outputs = _as_list(out)
     output_shapes = reconcile_output_shapes(
         folded_model.layers[-1].name,
-        [],
+        input_states,
         folded_model.outputs,
         out,
         comb.out_qint,
@@ -346,8 +478,20 @@ def trace_folded_entry_layer(*, node_pmap, layer, config) -> PrimitiveEvaluation
     )
 
 
+def trace_folded_entry_layer(*, node_pmap, layer, config) -> PrimitiveEvaluation:
+    """Trace rebuilt folded entry hardware before sequential precision handoff."""
+    return trace_folded_layer(
+        node_pmap=node_pmap,
+        layer=layer,
+        input_states=[],
+        config=config,
+    )
+
+
 def trace_reduce(*, node_pmap, input_states, config) -> PrimitiveEvaluation:
     """Trace a Sched-IR reduction directly over evaluated symbolic inputs."""
+
+    from da4ml.trace import comb_trace
 
     if len(input_states) != 1:
         raise ValueError(f"reduce expects one input state, got {len(input_states)}")
@@ -383,7 +527,17 @@ def trace_reduce(*, node_pmap, input_states, config) -> PrimitiveEvaluation:
 
 def evaluate_node(node_pmap, *, input_states, keras_layer, config):
     """Evaluate one supported compute node through a DA4ML single-layer trace."""
-    if node_pmap.get("op") in {"einsum", "softmax", "transport"}:
+    config = config or {}
+    if node_pmap.get("op") in {"einsum", "softmax"}:
+        return synthetic_primitive_from_op(
+            node_pmap=node_pmap,
+            input_states=input_states,
+            cost=estimate_attention_cost(
+                node_pmap,
+                calibration=config.get("attention_cost_oracle"),
+            ),
+        )
+    if node_pmap.get("op") == "transport":
         return synthetic_primitive_from_op(
             node_pmap=node_pmap,
             input_states=input_states,
@@ -408,4 +562,16 @@ def evaluate_node(node_pmap, *, input_states, keras_layer, config):
             layer=keras_layer,
             config=config,
         )
-    return trace_layer(layer=keras_layer, input_states=input_states, config=config)
+    if node_pmap.get("op") in {"dense", "elementwise"} and int(node_pmap.get("temporal_steps_T") or 1) > 1:
+        return trace_folded_layer(
+            node_pmap=node_pmap,
+            layer=keras_layer,
+            input_states=input_states,
+            config=config,
+        )
+    return trace_layer(
+        node_pmap=node_pmap,
+        layer=keras_layer,
+        input_states=input_states,
+        config=config,
+    )

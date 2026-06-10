@@ -41,7 +41,7 @@ def load_resource_config(resource_config=None) -> dict:
     cutoff = fpga.get("latency_cutoff", 5.0)
     if isinstance(cutoff, str):
         cutoff = 5.0
-    return {
+    runtime_config = {
         "hwconf": HWConfig(
             int(fpga.get("adder_size", 1)),
             int(fpga.get("carry_size", -1)),
@@ -55,6 +55,9 @@ def load_resource_config(resource_config=None) -> dict:
         ),
         "verbose": False,
     }
+    if "attention_cost_oracle" in data:
+        runtime_config["attention_cost_oracle"] = data["attention_cost_oracle"]
+    return runtime_config
 
 
 class DA4MLBackend:

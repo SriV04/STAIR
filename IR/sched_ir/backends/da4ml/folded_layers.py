@@ -10,6 +10,23 @@ import numpy as np
 _DENSE_SPATIAL_LABELS = "nmpqrstuvwxyzadefghijklo"
 
 
+def _as_list(value):
+    return list(value) if isinstance(value, (list, tuple)) else [value]
+
+
+def _tensor_shape(tensor) -> tuple[int, ...]:
+    return tuple(None if dim is None else int(dim) for dim in tuple(tensor.shape[1:]))
+
+
+def _fold_batchless_shape(shape: tuple, fold_factor: int) -> tuple[int, ...]:
+    if len(shape) != 2:
+        raise ValueError(f"Expected folded layer shape (N, C), got {shape}")
+    n_old, channels = shape
+    if n_old % fold_factor != 0:
+        raise ValueError(f"Input lane count {n_old} is not divisible by {fold_factor}")
+    return (int(n_old) // fold_factor, channels)
+
+
 def standard_dense_equation(input_shape: tuple, output_shape: tuple) -> str | None:
     """Return the explicit einsum equivalent for a last-axis Dense operation."""
     if len(input_shape) < 1 or len(input_shape) != len(output_shape):
@@ -59,6 +76,49 @@ def _relative_weight_path(variable, owner_layer) -> str | None:
     return "/".join(parts[parts.index(owner_layer.name) + 1 :])
 
 
+def _multi_quantizer_key(relative: str | None) -> str | None:
+    if relative is None:
+        return None
+    parts = relative.split("/")
+    if (
+        len(parts) >= 2
+        and parts[0].startswith("multiple_quantizers")
+        and parts[1].startswith("quantizer")
+    ):
+        return parts[1]
+    return None
+
+
+def _multi_quantizer_index(variable, owner_layer) -> int | None:
+    key = _multi_quantizer_key(_relative_weight_path(variable, owner_layer))
+    if key is None:
+        return None
+    ordered_keys = []
+    for weight in owner_layer.weights:
+        candidate = _multi_quantizer_key(_relative_weight_path(weight, owner_layer))
+        if candidate is not None and candidate not in ordered_keys:
+            ordered_keys.append(candidate)
+    try:
+        return ordered_keys.index(key)
+    except ValueError:
+        return None
+
+
+def _quantizer_role(variable, owner_layer) -> str | None:
+    relative = _relative_weight_path(variable, owner_layer)
+    if relative is None:
+        return None
+    parts = relative.split("/")
+    multi_index = _multi_quantizer_index(variable, owner_layer)
+    if multi_index is not None:
+        return f"multi_iq_{multi_index}"
+    first = parts[0]
+    for role in ("iq", "kq", "bq", "oq", "aq"):
+        if first == role or first.endswith(f"_{role}"):
+            return role
+    return None
+
+
 def _all_arrays_equal(values: list[np.ndarray]) -> bool:
     if not values:
         return False
@@ -97,8 +157,17 @@ def copy_folded_layer_weights(
             if folded_path is not None
             and _relative_weight_path(candidate[1], source_layer) == folded_path
         ]
+        folded_role = _quantizer_role(folded_var, folded_layer)
+        role_matches = [
+            candidate
+            for candidate in candidates
+            if folded_role is not None
+            and _quantizer_role(candidate[1], source_layer) == folded_role
+        ]
         if len(path_matches) == 1:
             selected = path_matches[0]
+        elif len(role_matches) == 1:
+            selected = role_matches[0]
         elif len(path_matches) > 1 or len(candidates) > 1:
             if folded_value.shape == () and _all_arrays_equal([candidate[2] for candidate in candidates]):
                 copied.append(candidates[0][2])
@@ -149,23 +218,46 @@ def copy_folded_layer_weights(
     return log
 
 
-def build_folded_entry_layer_model(source_layer, *, fold_factor: int):
-    """Rebuild the notebook's folded first HGQ dense/einsum layer as a Keras model."""
+def build_folded_layer_model(source_layer, *, fold_factor: int):
+    """Rebuild a folded HGQ dense/einsum layer as a local Keras model."""
     import keras
     import hgq  # noqa: F401  # Registers HGQ custom layers for reconstruction.
 
     if fold_factor < 1:
         raise ValueError(f"fold_factor must be positive, got {fold_factor}")
-    input_shape = tuple(source_layer.input.shape[1:])
-    output_shape = tuple(source_layer.output.shape[1:])
+    source_inputs = _as_list(source_layer.input)
+    if len(source_inputs) > 1:
+        input_shapes = [_tensor_shape(tensor) for tensor in source_inputs]
+        folded_inputs = [
+            keras.Input(
+                shape=_fold_batchless_shape(input_shape, fold_factor),
+                name=f"folded_input_{index}_f{fold_factor}",
+            )
+            for index, input_shape in enumerate(input_shapes)
+        ]
+        config = source_layer.get_config()
+        config["name"] = f"{source_layer.name}_folded_f{fold_factor}"
+        folded_layer = source_layer.__class__.from_config(config)
+        folded_output = folded_layer(folded_inputs)
+        folded_model = keras.Model(
+            inputs=folded_inputs,
+            outputs=folded_output,
+            name=f"folded_layer_f{fold_factor}",
+        )
+        weight_copy_log = copy_folded_layer_weights(
+            source_layer,
+            folded_layer,
+            fold_factor=fold_factor,
+        )
+        return folded_model, weight_copy_log
+
+    input_shape = _tensor_shape(source_inputs[0])
+    output_shape = _tensor_shape(source_layer.output)
     if len(input_shape) != 2 or len(output_shape) != 2:
         raise ValueError(
-            f"Expected folded entry layer shapes (N, C), got {input_shape} -> {output_shape}"
+            f"Expected folded layer shapes (N, C), got {input_shape} -> {output_shape}"
         )
-    n_old, channels_in = input_shape
-    if n_old % fold_factor != 0:
-        raise ValueError(f"Input lane count {n_old} is not divisible by {fold_factor}")
-    n_folded = int(n_old) // fold_factor
+    n_folded, channels_in = _fold_batchless_shape(input_shape, fold_factor)
     kwargs = {
         "name": f"{source_layer.name}_folded_f{fold_factor}",
     }
@@ -194,7 +286,7 @@ def build_folded_entry_layer_model(source_layer, *, fold_factor: int):
     folded_model = keras.Model(
         inputs=folded_input,
         outputs=folded_output,
-        name=f"folded_entry_f{fold_factor}",
+        name=f"folded_layer_f{fold_factor}",
     )
     weight_copy_log = copy_folded_layer_weights(
         source_layer,
@@ -202,3 +294,8 @@ def build_folded_entry_layer_model(source_layer, *, fold_factor: int):
         fold_factor=fold_factor,
     )
     return folded_model, weight_copy_log
+
+
+def build_folded_entry_layer_model(source_layer, *, fold_factor: int):
+    """Compatibility wrapper for the original folded-entry trace helper."""
+    return build_folded_layer_model(source_layer, fold_factor=fold_factor)
