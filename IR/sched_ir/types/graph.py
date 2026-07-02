@@ -1,3 +1,5 @@
+"""Default graph-level properties for a Sched-IR graph."""
+
 from __future__ import annotations
 
 

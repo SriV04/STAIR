@@ -8,9 +8,7 @@ import sys
 import re
 import tempfile
 from pathlib import Path
-from zipfile import ZipFile
 import pandas as pd
-import numpy as np
 
 # Add repo to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -20,7 +18,7 @@ from IR.nn_ir.styling import apply_nn_style
 from IR.sched_ir import api
 from IR.sched_ir.graphing.styling import apply_sched_style
 import keras
-import hgq
+import hgq  # noqa: F401 -- registers HGQ custom layers so keras can deserialize the models
 
 from heterograph.webview import WebView
 
@@ -308,18 +306,19 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     print(f"FOLDED DESIGN EVALUATION PIPELINE")
-    
-    # Model path from api.py
-    # model_path = Path("official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras")
-    # model_path = Path("official_models/deepset/epoch=890-acc=69.51%-val_acc=70.03%-EBOPs=146212.keras")
-    # model_path = Path("official_models/deepset/epoch=490-acc=68.93%-val_acc=69.57%-EBOPs=80935.keras")
-    # linformer
-    # model_path = Path("official_models/linformers/lin8part.keras")
-    # model_path = Path("official_models/linformers/lin16part.keras")
-    model_path = Path("official_models/linformers/lin32part.keras")
 
-    # 64 particle model 
-    # model_path = Path("official_models/3-feature-perminv/jet_classifier_large_64/ckpts/epoch=1294-acc=81.65%-val_acc=81.64%-EBOPs=226791.keras")
+    # Pretrained checkpoints known to work with this pipeline (see README "Available
+    # models"). Pick one by name below, or pass any path from official_models/.
+    known_models = {
+        "jedi-8": "official_models/3-feature-perminv/jet_classifier_large_8/ckpts/epoch=1087-acc=66.97%-val_acc=66.60%-EBOPs=170586.keras",
+        "jedi-64": "official_models/3-feature-perminv/jet_classifier_large_64/ckpts/epoch=1294-acc=81.65%-val_acc=81.64%-EBOPs=226791.keras",
+        "deepset-large": "official_models/deepset/epoch=890-acc=69.51%-val_acc=70.03%-EBOPs=146212.keras",
+        "deepset-small": "official_models/deepset/epoch=490-acc=68.93%-val_acc=69.57%-EBOPs=80935.keras",
+        "linformer-8": "official_models/linformers/lin8part.keras",
+        "linformer-16": "official_models/linformers/lin16part.keras",
+        "linformer-32": "official_models/linformers/lin32part.keras",
+    }
+    model_path = Path(known_models["linformer-32"])
 
     try:
         # Step 1: Load model
@@ -333,14 +332,14 @@ def main(argv=None):
 
         apply_nn_style(nn_graph)
         apply_sched_style(design.sched_graph)
-        
-        # Step 6: Print summary
-        for k, v in design.metrics.items():
-            print(f"  {k}: {v:.4f}" if isinstance(v, float) else f"  {k}: {v}")
 
+        # Step 4: Per-task cost breakdown (LUT/FF/DSP/BRAM, start/end cycle, II)
+        extract_cost_per_task(design, design.task_ir)
+
+        # Step 5: Prove the folded schedule matches the original model
         correctness = check_correctness(design, model)
 
-
+        # Step 6: Serve the interactive graph viewer
         webview = WebView()
         graphs = [
             ("NN-IR Graph", nn_graph),

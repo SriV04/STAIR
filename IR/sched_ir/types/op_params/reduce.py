@@ -1,3 +1,5 @@
+"""Op-param record for reduction primitives (sum/mean/max over axes)."""
+
 from __future__ import annotations
 
 

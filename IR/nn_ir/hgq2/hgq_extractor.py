@@ -1,4 +1,4 @@
-"""Serializable HGQ metadata extraction for NN-IR."""
+"""Serialisable HGQ metadata extraction for NN-IR."""
 
 from __future__ import annotations
 
@@ -235,43 +235,6 @@ def quantizer_summary(q, *, place: str | None = None) -> dict[str, Any] | None:
         "place": place,
         "source": "HGQ",
     }
-
-
-def _bitwidth_stats(summary: dict[str, Any] | None) -> dict[str, Any]:
-    if not summary or not summary.get("kif"):
-        return {"avg": None, "max": None, "min": None, "shape": None}
-    bits = summary["kif"].get("bits")
-    if bits is None:
-        return {"avg": None, "max": None, "min": None, "shape": summary.get("shape")}
-    arr = np.array(bits, dtype=float)
-    if arr.size == 0:
-        return {"avg": None, "max": None, "min": None, "shape": summary.get("shape")}
-    return {
-        "avg": float(arr.mean()),
-        "max": float(arr.max()),
-        "min": float(arr.min()),
-        "shape": tuple(arr.shape),
-    }
-
-
-def bw_array(quantizer) -> np.ndarray | None:
-    summary = quantizer_summary(quantizer)
-    if not summary or not summary.get("kif"):
-        return None
-    bits = summary["kif"].get("bits")
-    return np.array(bits, dtype=float) if bits is not None else None
-
-
-def avg_bw(quantizer) -> float | None:
-    return _bitwidth_stats(quantizer_summary(quantizer)).get("avg")
-
-
-def max_bw(quantizer) -> float | None:
-    return _bitwidth_stats(quantizer_summary(quantizer)).get("max")
-
-
-def min_bw(quantizer) -> float | None:
-    return _bitwidth_stats(quantizer_summary(quantizer)).get("min")
 
 
 def find_output_quantizer(layer) -> dict[str, Any] | None:

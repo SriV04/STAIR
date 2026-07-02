@@ -70,39 +70,6 @@ def _copy_first_present(src: dict, keys: list[str]):
     return None
 
 
-def _bits_from_kif(kif):
-    """Return a scalar bitwidth when the KIF payload is scalar-ish."""
-    if kif is None:
-        return None
-    bits = kif.get("bits") if isinstance(kif, dict) else None
-    if bits is None:
-        return None
-    if isinstance(bits, (int, float)):
-        return float(bits)
-    if hasattr(bits, "item") and getattr(bits, "shape", ()) == ():
-        return float(bits.item())
-    if hasattr(bits, "size") and getattr(bits, "size", None) == 1:
-        return float(bits.reshape(-1)[0])
-    return None
-
-
-def _precision_record_from_nn(p: dict, prefix: str) -> dict | None:
-    qint = p.get(f"{prefix}_qint")
-    kif = p.get(f"{prefix}_kif")
-    quantizer = p.get(prefix)
-    if qint is None and kif is None and quantizer is None:
-        return None
-    return {
-        "qint": qint,
-        "kif": kif,
-        "bitwidth_bits": _bits_from_kif(kif),
-        "tensor_width_bits": None,
-        "shape": p.get(f"{prefix}_bw_shape"),
-        "source": "hgq",
-        "quantizer": quantizer,
-    }
-
-
 def _legacy_bw_from_nn(p: dict, prefix: str) -> float | None:
     return _copy_first_present(
         p,

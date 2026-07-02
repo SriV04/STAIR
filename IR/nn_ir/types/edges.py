@@ -1,3 +1,5 @@
+"""Default property record for NN-IR tensor edges (shape + producer/consumer precision)."""
+
 from __future__ import annotations
 
 

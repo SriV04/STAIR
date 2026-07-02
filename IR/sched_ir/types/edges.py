@@ -1,3 +1,5 @@
+"""Default property record for Sched-IR data/control edges."""
+
 from __future__ import annotations
 
 

@@ -1,16 +1,6 @@
+"""Default precision-interface record attached to every Sched-IR node."""
+
 from __future__ import annotations
-
-
-def default_precision_record() -> dict:
-    return {
-        "qint": None,
-        "kif": None,
-        "bitwidth_bits": None,
-        "tensor_width_bits": None,
-        "shape": None,
-        "source": "unknown",
-        "quantizer": None,
-    }
 
 
 def default_precision_interface() -> dict:
@@ -25,4 +15,3 @@ def default_precision_interface() -> dict:
         "output_tensor_width_bits": None,
         "precision_source": "unknown",
     }
-

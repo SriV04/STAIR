@@ -1,3 +1,5 @@
+"""Default folding/timing fields (N, P, T, fold group) attached to Sched-IR nodes."""
+
 from __future__ import annotations
 
 

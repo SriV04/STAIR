@@ -1,3 +1,5 @@
+"""Op-param record for elementwise primitives (add, multiply, ...)."""
+
 from __future__ import annotations
 
 

@@ -133,6 +133,11 @@ def test_attention_barrier_edges_consume_all_temporal_tokens():
         else:
             sched.pmap[edge]["value_id"] = f"{edge[0]}:out"
 
+    # The current fold plan keeps the attention core non-folded (T=1), so force
+    # the query producer to be temporally folded to exercise the barrier
+    # semantics: a consume_mode="all" edge must consume every temporal token.
+    sched.pmap[query_vx]["temporal_steps_T"] = 2
+
     task_graph = expand_tasks(sched)
     qk_task = task_graph.tasks[f"node:{qk_vx}"]
 

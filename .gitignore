@@ -1,23 +1,24 @@
-JEDI-linear/
-heterograph/
-.claude/
-official_models/
+# Python
 __pycache__/
 *.pyc
-IR/Sched-IR/__pycache__/decomposer.cpython-313.pyc
-IR/Sched-IR/__pycache__/schema.cpython-313.pyc
-IR/NN-IR/__pycache__/builder.cpython-313.pyc
-IR/NN-IR/__pycache__/schema.cpython-313.pyc
-
-IR/evaluation_plots/
-
+.pytest_cache/
 .cache/
 
-docs/superpowers/
+# Vendored dependencies & pretrained weights (see README Setup)
 third_party/
+official_models/
 
-jedi-linear-8-3/
+# Generated outputs
+graphs/
+notebooks/hardware/generated/
 notebooks/*.png
 notebooks/deepnet_figures/*.png
-IR/jedi_luts_vs_particles_by_feature.png
+jedi-linear-8-3/
+IR/evaluation_plots/
+
+# Local-only docs & tooling
+docs/superpowers/
+.claude/
+
+# OS
 .DS_Store

@@ -1,3 +1,5 @@
+"""Op-param record for data-movement (transport) primitives."""
+
 from __future__ import annotations
 
 

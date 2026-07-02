@@ -1,4 +1,7 @@
-"""NN-IR package."""
+"""NN-IR: lifts a trained (HGQ2-quantized) Keras model into a hardware-oriented graph.
+
+Public entry point: ``build_nn_ir(model)`` -> ``heterograph.HGraph``.
+"""
 
 __all__ = ["build_nn_ir"]
 

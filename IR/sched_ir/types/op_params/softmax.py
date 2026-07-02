@@ -1,3 +1,5 @@
+"""Op-param record for softmax primitives."""
+
 from __future__ import annotations
 
 

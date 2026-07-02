@@ -1,3 +1,5 @@
+"""Op-param record for dense (CMVM) primitives."""
+
 from __future__ import annotations
 
 

@@ -1,3 +1,5 @@
+"""Heterograph init hooks defining the default Sched-IR vertex/edge/graph schema."""
+
 from __future__ import annotations
 
 from .types.edges import default_edge_properties

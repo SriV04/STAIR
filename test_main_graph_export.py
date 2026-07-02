@@ -1,3 +1,5 @@
+"""Tests for main.py's PNG graph export (runs without the heavy keras/da4ml deps)."""
+
 import sys
 import types
 

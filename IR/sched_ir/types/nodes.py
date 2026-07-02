@@ -1,3 +1,5 @@
+"""Default property record for Sched-IR nodes (identity, timing, precision, op params)."""
+
 from __future__ import annotations
 
 from .precision import default_precision_interface

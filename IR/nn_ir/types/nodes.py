@@ -1,3 +1,5 @@
+"""Default property record for NN-IR nodes (layer identity, shapes, quantizer metadata)."""
+
 from __future__ import annotations
 
 

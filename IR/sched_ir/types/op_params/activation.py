@@ -1,3 +1,5 @@
+"""Op-param record for activation primitives."""
+
 from __future__ import annotations
 
 

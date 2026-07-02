@@ -1,3 +1,5 @@
+"""Op-param record for general einsum primitives."""
+
 from __future__ import annotations
 
 
